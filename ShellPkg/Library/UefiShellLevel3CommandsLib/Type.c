@@ -2,14 +2,8 @@
   Main file for Type shell level 3 function.
 
   (C) Copyright 2013-2015 Hewlett-Packard Development Company, L.P.<BR>
-  Copyright (c) 2009 - 2011, Intel Corporation. All rights reserved. <BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2009 - 2018, Intel Corporation. All rights reserved. <BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -83,7 +77,7 @@ TypeFileByHandle (
           //
           // Allow Line Feed (LF) (0xA) & Carriage Return (CR) (0xD)
           // characters to be displayed as is.
-          // 
+          //
           if (AsciiChar == '\n' && ((CHAR8*)Buffer)[LoopVar-1] != '\r') {
             //
             // In case Line Feed (0xA) is encountered & Carriage Return (0xD)
@@ -114,7 +108,7 @@ TypeFileByHandle (
       } else {
         LoopSize = ReadSize / (sizeof (CHAR16));
       }
-      
+
       for (LoopVar = 0 ; LoopVar < LoopSize ; LoopVar++) {
         //
         // An invalid range of characters is 0x0-0x1F.
@@ -126,7 +120,7 @@ TypeFileByHandle (
           //
           // Allow Line Feed (LF) (0xA) & Carriage Return (CR) (0xD)
           // characters to be displayed as is.
-          // 
+          //
           if (Ucs2Char == '\n' && ((CHAR16*)Buffer)[LoopVar-1] != '\r') {
             //
             // In case Line Feed (0xA) is encountered & Carriage Return (0xD)
@@ -137,7 +131,7 @@ TypeFileByHandle (
             ShellPrintEx (-1, -1, L"\r\n");
             continue;
           }
-        } 
+        }
         else if (Ucs2Char < 0x20) {
           //
           // For all other characters which are not printable, display '.'
@@ -207,7 +201,7 @@ ShellCommandRunType (
   Status = ShellCommandLineParse (ParamList, &Package, &ProblemParam, TRUE);
   if (EFI_ERROR(Status)) {
     if (Status == EFI_VOLUME_CORRUPTED && ProblemParam != NULL) {
-      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PROBLEM), gShellLevel3HiiHandle, L"type", ProblemParam);  
+      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PROBLEM), gShellLevel3HiiHandle, L"type", ProblemParam);
       FreePool(ProblemParam);
       ShellStatus = SHELL_INVALID_PARAMETER;
     } else {
@@ -224,13 +218,13 @@ ShellCommandRunType (
     UnicodeMode = ShellCommandLineGetFlag(Package, L"-u");
 
     if (AsciiMode && UnicodeMode) {
-      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PARAM_INV), gShellLevel3HiiHandle, L"type", L"-a & -u");  
+      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PARAM_INV), gShellLevel3HiiHandle, L"type", L"-a & -u");
       ShellStatus = SHELL_INVALID_PARAMETER;
    } else if (ShellCommandLineGetRawValue(Package, 1) == NULL) {
       //
       // we insufficient parameters
       //
-      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_TOO_FEW), gShellLevel3HiiHandle, L"type");  
+      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_TOO_FEW), gShellLevel3HiiHandle, L"type");
       ShellStatus = SHELL_INVALID_PARAMETER;
     } else {
       //
@@ -243,7 +237,7 @@ ShellCommandRunType (
          ){
         Status = ShellOpenFileMetaArg((CHAR16*)Param, EFI_FILE_MODE_READ, &FileList);
         if (EFI_ERROR(Status)) {
-          ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_FILE_OPEN_FAIL), gShellLevel3HiiHandle, L"type", (CHAR16*)Param);  
+          ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_FILE_OPEN_FAIL), gShellLevel3HiiHandle, L"type", (CHAR16*)Param);
           ShellStatus = SHELL_NOT_FOUND;
           break;
         }
@@ -256,7 +250,7 @@ ShellCommandRunType (
           // check that we have at least 1 file
           //
           if (FileList == NULL || IsListEmpty(&FileList->Link)) {
-            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_FILE_NF), gShellLevel3HiiHandle, L"type", Param);  
+            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_FILE_NF), gShellLevel3HiiHandle, L"type", Param);
             continue;
           } else {
             //
@@ -275,7 +269,7 @@ ShellCommandRunType (
               // make sure the file opened ok
               //
               if (EFI_ERROR(Node->Status)){
-                ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_FILE_OPEN_FAIL), gShellLevel3HiiHandle, L"type", Node->FileName);  
+                ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_FILE_OPEN_FAIL), gShellLevel3HiiHandle, L"type", Node->FileName);
                 ShellStatus = SHELL_NOT_FOUND;
                 continue;
               }
@@ -284,7 +278,7 @@ ShellCommandRunType (
               // make sure its not a directory
               //
               if (FileHandleIsDirectory(Node->Handle) == EFI_SUCCESS) {
-                ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_IS_DIR), gShellLevel3HiiHandle, L"type", Node->FileName);  
+                ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_IS_DIR), gShellLevel3HiiHandle, L"type", Node->FileName);
                 ShellStatus = SHELL_NOT_FOUND;
                 continue;
               }

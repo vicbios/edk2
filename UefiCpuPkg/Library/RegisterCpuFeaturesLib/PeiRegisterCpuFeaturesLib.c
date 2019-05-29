@@ -2,13 +2,7 @@
   CPU Register Table Library functions.
 
   Copyright (c) 2016, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -68,15 +62,15 @@ GetCpuFeaturesData (
 /**
   Worker function to get MP PPI service pointer.
 
-  @return PEI PPI service pointer.
+  @return MP_SERVICES variable.
 **/
-EFI_PEI_MP_SERVICES_PPI *
-GetMpPpi (
+MP_SERVICES
+GetMpService (
   VOID
   )
 {
   EFI_STATUS                 Status;
-  EFI_PEI_MP_SERVICES_PPI    *CpuMpPpi;
+  MP_SERVICES                MpService;
 
   //
   // Get MP Services Protocol
@@ -85,29 +79,36 @@ GetMpPpi (
              &gEfiPeiMpServicesPpiGuid,
              0,
              NULL,
-             (VOID **)&CpuMpPpi
+             (VOID **)&MpService.Ppi
              );
   ASSERT_EFI_ERROR (Status);
-  return CpuMpPpi;
+  return MpService;
 }
 
 /**
   Worker function to return processor index.
 
+  @param  CpuFeaturesData    Cpu Feature Data structure.
+
   @return  The processor index.
 **/
 UINTN
 GetProcessorIndex (
-  VOID
+  IN CPU_FEATURES_DATA        *CpuFeaturesData
   )
 {
   EFI_STATUS                 Status;
   EFI_PEI_MP_SERVICES_PPI    *CpuMpPpi;
   UINTN                      ProcessorIndex;
 
-  CpuMpPpi = GetMpPpi ();
+  CpuMpPpi = CpuFeaturesData->MpService.Ppi;
 
-  Status = CpuMpPpi->WhoAmI(GetPeiServicesTablePointer (), CpuMpPpi, &ProcessorIndex);
+  //
+  // For two reasons which use NULL for WhoAmI:
+  // 1. This function will be called by APs and AP should not use PeiServices Table
+  // 2. Check WhoAmI implementation, this parameter will not be used.
+  //
+  Status = CpuMpPpi->WhoAmI(NULL, CpuMpPpi, &ProcessorIndex);
   ASSERT_EFI_ERROR (Status);
   return ProcessorIndex;
 }
@@ -130,8 +131,11 @@ GetProcessorInformation (
 {
   EFI_PEI_MP_SERVICES_PPI    *CpuMpPpi;
   EFI_STATUS                 Status;
+  CPU_FEATURES_DATA          *CpuFeaturesData;
 
-  CpuMpPpi = GetMpPpi ();
+  CpuFeaturesData = GetCpuFeaturesData ();
+  CpuMpPpi = CpuFeaturesData->MpService.Ppi;
+
   Status = CpuMpPpi->GetProcessorInfo (
                GetPeiServicesTablePointer(),
                CpuMpPpi,
@@ -146,25 +150,21 @@ GetProcessorInformation (
 
   @param[in]  Procedure               A pointer to the function to be run on
                                       enabled APs of the system.
+  @param[in]  MpEvent                 The Event used to sync the result.
+
 **/
 VOID
 StartupAPsWorker (
-  IN  EFI_AP_PROCEDURE                 Procedure
+  IN  EFI_AP_PROCEDURE                 Procedure,
+  IN  EFI_EVENT                        MpEvent
   )
 {
   EFI_STATUS                           Status;
   EFI_PEI_MP_SERVICES_PPI              *CpuMpPpi;
+  CPU_FEATURES_DATA                    *CpuFeaturesData;
 
-  //
-  // Get MP Services Protocol
-  //
-  Status = PeiServicesLocatePpi (
-             &gEfiPeiMpServicesPpiGuid,
-             0,
-             NULL,
-             (VOID **)&CpuMpPpi
-             );
-  ASSERT_EFI_ERROR (Status);
+  CpuFeaturesData = GetCpuFeaturesData ();
+  CpuMpPpi = CpuFeaturesData->MpService.Ppi;
 
   //
   // Wakeup all APs for data collection.
@@ -175,7 +175,7 @@ StartupAPsWorker (
                  Procedure,
                  FALSE,
                  0,
-                 NULL
+                 CpuFeaturesData
                  );
   ASSERT_EFI_ERROR (Status);
 }
@@ -192,17 +192,10 @@ SwitchNewBsp (
 {
   EFI_STATUS                           Status;
   EFI_PEI_MP_SERVICES_PPI              *CpuMpPpi;
+  CPU_FEATURES_DATA                    *CpuFeaturesData;
 
-  //
-  // Get MP Services Protocol
-  //
-  Status = PeiServicesLocatePpi (
-             &gEfiPeiMpServicesPpiGuid,
-             0,
-             NULL,
-             (VOID **)&CpuMpPpi
-             );
-  ASSERT_EFI_ERROR (Status);
+  CpuFeaturesData = GetCpuFeaturesData ();
+  CpuMpPpi = CpuFeaturesData->MpService.Ppi;
 
   //
   // Wakeup all APs for data collection.
@@ -219,7 +212,7 @@ SwitchNewBsp (
 /**
   Worker function to retrieve the number of logical processor in the platform.
 
-  @param[out] NumberOfProcessors          Pointer to the total number of logical
+  @param[out] NumberOfCpus                Pointer to the total number of logical
                                           processors in the system, including the BSP
                                           and disabled APs.
   @param[out] NumberOfEnabledProcessors   Pointer to the number of enabled logical
@@ -234,17 +227,10 @@ GetNumberOfProcessor (
 {
   EFI_STATUS                 Status;
   EFI_PEI_MP_SERVICES_PPI    *CpuMpPpi;
+  CPU_FEATURES_DATA          *CpuFeaturesData;
 
-  //
-  // Get MP Services Protocol
-  //
-  Status = PeiServicesLocatePpi (
-             &gEfiPeiMpServicesPpiGuid,
-             0,
-             NULL,
-             (VOID **)&CpuMpPpi
-             );
-  ASSERT_EFI_ERROR (Status);
+  CpuFeaturesData = GetCpuFeaturesData ();
+  CpuMpPpi = CpuFeaturesData->MpService.Ppi;
 
   //
   // Get the number of CPUs
@@ -259,132 +245,48 @@ GetNumberOfProcessor (
 }
 
 /**
-  Allocates ACPI NVS memory to save ACPI_CPU_DATA.
+  Performs CPU features Initialization.
 
-  @return  Pointer to allocated ACPI_CPU_DATA.
+  This service will invoke MP service to perform CPU features
+  initialization on BSP/APs per user configuration.
+
+  @note This service could be called by BSP only.
 **/
-ACPI_CPU_DATA *
-AllocateAcpiCpuData (
+VOID
+EFIAPI
+CpuFeaturesInitialize (
   VOID
   )
 {
-  EFI_STATUS                           Status;
-  EFI_PEI_MP_SERVICES_PPI              *CpuMpPpi;
-  UINTN                                NumberOfCpus;
-  UINTN                                NumberOfEnabledProcessors;
-  ACPI_CPU_DATA                        *AcpiCpuData;
-  EFI_PHYSICAL_ADDRESS                 Address;
-  UINTN                                TableSize;
-  CPU_REGISTER_TABLE                   *RegisterTable;
-  UINTN                                Index;
-  EFI_PROCESSOR_INFORMATION            ProcessorInfoBuffer;
+  CPU_FEATURES_DATA          *CpuFeaturesData;
+  UINTN                      OldBspNumber;
 
-  Status = PeiServicesAllocatePages (
-             EfiACPIMemoryNVS,
-             EFI_SIZE_TO_PAGES (sizeof (ACPI_CPU_DATA)),
-             &Address
-             );
-  ASSERT_EFI_ERROR (Status);
-  AcpiCpuData = (ACPI_CPU_DATA *) (UINTN) Address;
-  ASSERT (AcpiCpuData != NULL);
+  CpuFeaturesData = GetCpuFeaturesData ();
+
+  OldBspNumber = GetProcessorIndex (CpuFeaturesData);
+  CpuFeaturesData->BspNumber = OldBspNumber;
 
   //
-  // Get MP Services Protocol
+  // Known limitation: In PEI phase, CpuFeatures driver not
+  // support async mode execute tasks. So semaphore type
+  // register can't been used for this instance, must use
+  // DXE type instance.
   //
-  Status = PeiServicesLocatePpi (
-             &gEfiPeiMpServicesPpiGuid,
-             0,
-             NULL,
-             (VOID **)&CpuMpPpi
-             );
-  ASSERT_EFI_ERROR (Status);
 
   //
-  // Get the number of CPUs
+  // Wakeup all APs for programming.
   //
-  Status = CpuMpPpi->GetNumberOfProcessors (
-                         GetPeiServicesTablePointer (),
-                         CpuMpPpi,
-                         &NumberOfCpus,
-                         &NumberOfEnabledProcessors
-                         );
-  ASSERT_EFI_ERROR (Status);
-  AcpiCpuData->NumberOfCpus = (UINT32)NumberOfCpus;
+  StartupAPsWorker (SetProcessorRegister, NULL);
+  //
+  // Programming BSP
+  //
+  SetProcessorRegister (CpuFeaturesData);
 
   //
-  // Allocate buffer for empty RegisterTable and PreSmmInitRegisterTable for all CPUs
+  // Switch to new BSP if required
   //
-  TableSize = 2 * NumberOfCpus * sizeof (CPU_REGISTER_TABLE);
-  Status = PeiServicesAllocatePages (
-             EfiACPIMemoryNVS,
-             EFI_SIZE_TO_PAGES (TableSize),
-             &Address
-             );
-  ASSERT_EFI_ERROR (Status);
-  RegisterTable = (CPU_REGISTER_TABLE *) (UINTN) Address;
-
-  for (Index = 0; Index < NumberOfCpus; Index++) {
-    Status = CpuMpPpi->GetProcessorInfo (
-                         GetPeiServicesTablePointer (),
-                         CpuMpPpi,
-                         Index,
-                         &ProcessorInfoBuffer
-                         );
-    ASSERT_EFI_ERROR (Status);
-
-    RegisterTable[Index].InitialApicId      = (UINT32)ProcessorInfoBuffer.ProcessorId;
-    RegisterTable[Index].TableLength        = 0;
-    RegisterTable[Index].AllocatedSize      = 0;
-    RegisterTable[Index].RegisterTableEntry = 0;
-
-    RegisterTable[NumberOfCpus + Index].InitialApicId      = (UINT32)ProcessorInfoBuffer.ProcessorId;
-    RegisterTable[NumberOfCpus + Index].TableLength        = 0;
-    RegisterTable[NumberOfCpus + Index].AllocatedSize      = 0;
-    RegisterTable[NumberOfCpus + Index].RegisterTableEntry = 0;
+  if (CpuFeaturesData->BspNumber != OldBspNumber) {
+    SwitchNewBsp (CpuFeaturesData->BspNumber);
   }
-  AcpiCpuData->RegisterTable           = (EFI_PHYSICAL_ADDRESS)(UINTN)RegisterTable;
-  AcpiCpuData->PreSmmInitRegisterTable = (EFI_PHYSICAL_ADDRESS)(UINTN)(RegisterTable + NumberOfCpus);
-
-  return AcpiCpuData;
 }
 
-/**
-  Enlarges CPU register table for each processor.
-
-  @param[in, out]  RegisterTable   Pointer processor's CPU register table
-**/
-VOID
-EnlargeRegisterTable (
-  IN OUT CPU_REGISTER_TABLE            *RegisterTable
-  )
-{
-  EFI_STATUS                           Status;
-  EFI_PHYSICAL_ADDRESS                 Address;
-  UINTN                                AllocatePages;
-
-  AllocatePages = RegisterTable->AllocatedSize / EFI_PAGE_SIZE;
-  Status = PeiServicesAllocatePages (
-             EfiACPIMemoryNVS,
-             AllocatePages + 1,
-             &Address
-             );
-  ASSERT_EFI_ERROR (Status);
-
-  //
-  // If there are records existing in the register table, then copy its contents
-  // to new region and free the old one.
-  //
-  if (RegisterTable->AllocatedSize > 0) {
-    CopyMem (
-      (VOID *) (UINTN) Address,
-      (VOID *) (UINTN) RegisterTable->RegisterTableEntry,
-      RegisterTable->AllocatedSize
-      );
-  }
-
-  //
-  // Adjust the allocated size and register table base address.
-  //
-  RegisterTable->AllocatedSize += EFI_PAGE_SIZE;
-  RegisterTable->RegisterTableEntry = Address;
-}

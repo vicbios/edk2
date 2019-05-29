@@ -1,14 +1,8 @@
 /** @file
   Report Status Code Library for DXE Phase.
 
-  Copyright (c) 2006 - 2010, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -106,13 +100,13 @@ InternalReportStatusCode (
         return EFI_UNSUPPORTED;
       }
     }
-  
+
     //
     // A status code service is present in system, so pass in all the parameters to the service.
     //
     return (*mReportStatusCode) (Type, Value, Instance, (EFI_GUID *)CallerId, Data);
   }
-  
+
   return EFI_UNSUPPORTED;
 }
 
@@ -508,7 +502,7 @@ ReportStatusCodeEx (
   //
   Tpl = gBS->RaiseTPL (TPL_HIGH_LEVEL);
   gBS->RestoreTPL (Tpl);
-  
+
   StatusCodeData = NULL;
   if (Tpl <= TPL_NOTIFY) {
     //

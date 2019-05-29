@@ -2,14 +2,8 @@
   Produces Simple Text Input Protocol, Simple Text Input Extended Protocol and
   Simple Text Output Protocol upon Serial IO Protocol.
 
-Copyright (c) 2006 - 2017, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -488,6 +482,9 @@ TerminalDriverBindingStart (
                   EFI_OPEN_PROTOCOL_BY_DRIVER
                   );
   ASSERT ((Status == EFI_SUCCESS) || (Status == EFI_ALREADY_STARTED));
+  if (EFI_ERROR (Status) && (Status != EFI_ALREADY_STARTED)) {
+    return Status;
+  }
 
   //
   // Open the Serial I/O Protocol BY_DRIVER.  It might already be started.
@@ -501,6 +498,9 @@ TerminalDriverBindingStart (
                   EFI_OPEN_PROTOCOL_BY_DRIVER
                   );
   ASSERT ((Status == EFI_SUCCESS) || (Status == EFI_ALREADY_STARTED));
+  if (EFI_ERROR (Status) && (Status != EFI_ALREADY_STARTED)) {
+    return Status;
+  }
 
   if (!IsHotPlugDevice (ParentDevicePath)) {
     //
@@ -994,6 +994,49 @@ TerminalDriverBindingStop (
 }
 
 /**
+  Compare a device path data structure to that of all the nodes of a
+  second device path instance.
+
+  @param  Multi          A pointer to a multi-instance device path data structure.
+  @param  Single         A pointer to a single-instance device path data structure.
+
+  @retval TRUE           If the Single is contained within Multi.
+  @retval FALSE          The Single is not match within Multi.
+
+**/
+BOOLEAN
+MatchDevicePaths (
+  IN  EFI_DEVICE_PATH_PROTOCOL  *Multi,
+  IN  EFI_DEVICE_PATH_PROTOCOL  *Single
+  )
+{
+  EFI_DEVICE_PATH_PROTOCOL  *DevicePath;
+  EFI_DEVICE_PATH_PROTOCOL  *DevicePathInst;
+  UINTN                     Size;
+
+  DevicePath      = Multi;
+  DevicePathInst  = GetNextDevicePathInstance (&DevicePath, &Size);
+  //
+  // Search for the match of 'Single' in 'Multi'
+  //
+  while (DevicePathInst != NULL) {
+    //
+    // If the single device path is found in multiple device paths,
+    // return success
+    //
+    if (CompareMem (Single, DevicePathInst, Size) == 0) {
+      FreePool (DevicePathInst);
+      return TRUE;
+    }
+
+    FreePool (DevicePathInst);
+    DevicePathInst = GetNextDevicePathInstance (&DevicePath, &Size);
+  }
+
+  return FALSE;
+}
+
+/**
   Update terminal device path in Console Device Environment Variables.
 
   @param  VariableName           The Console Device Environment Variable.
@@ -1018,8 +1061,12 @@ TerminalUpdateConsoleDevVariable (
   //
   // Get global variable and its size according to the name given.
   //
-  GetEfiGlobalVariable2 (VariableName, (VOID**)&Variable, NULL);
-  if (Variable == NULL) {
+  Status = GetEfiGlobalVariable2 (VariableName, (VOID**)&Variable, NULL);
+  if (Status == EFI_NOT_FOUND) {
+    Status   = EFI_SUCCESS;
+    Variable = NULL;
+  }
+  if (EFI_ERROR (Status)) {
     return;
   }
 
@@ -1028,17 +1075,21 @@ TerminalUpdateConsoleDevVariable (
   //
   for (TerminalType = 0; TerminalType < ARRAY_SIZE (mTerminalType); TerminalType++) {
     SetTerminalDevicePath (TerminalType, ParentDevicePath, &TempDevicePath);
-    NewVariable = AppendDevicePathInstance (Variable, TempDevicePath);
-    ASSERT (NewVariable != NULL);
-    if (Variable != NULL) {
-      FreePool (Variable);
-    }
 
     if (TempDevicePath != NULL) {
+      if (!MatchDevicePaths (Variable, TempDevicePath)) {
+        NewVariable = AppendDevicePathInstance (Variable, TempDevicePath);
+        if (NewVariable != NULL) {
+          if (Variable != NULL) {
+            FreePool (Variable);
+          }
+          Variable = NewVariable;
+        }
+      }
+
       FreePool (TempDevicePath);
     }
 
-    Variable = NewVariable;
   }
 
   VariableSize = GetDevicePathSize (Variable);

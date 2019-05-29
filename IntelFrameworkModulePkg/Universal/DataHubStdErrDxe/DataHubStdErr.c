@@ -2,14 +2,8 @@
   Data Hub filter driver that takes DEBUG () info from Data Hub and writes it
   to StdErr if it exists.
 
-Copyright (c) 2006 - 2009, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -65,7 +59,7 @@ DataHubStdErrEventHandler (
   if (gST->StdErr == NULL) {
     return ;
   }
-  
+
   //
   // Mtc of zero means return the next record that has not been read by the
   // event handler.

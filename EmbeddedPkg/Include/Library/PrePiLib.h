@@ -3,13 +3,7 @@
 
   Copyright (c) 2008 - 2009, Apple Inc. All rights reserved.<BR>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -101,7 +95,7 @@ FfsFindSectionData (
 **/
 EFI_STATUS
 EFIAPI
-FfsFindByName (
+FfsFindFileByName (
   IN CONST  EFI_GUID            *FileName,
   IN CONST  EFI_PEI_FV_HANDLE   VolumeHandle,
   OUT       EFI_PEI_FILE_HANDLE *FileHandle
@@ -273,24 +267,6 @@ HobConstructor (
   IN VOID   *EfiFreeMemoryBottom,
   IN VOID   *EfiFreeMemoryTop
   );
-
-/**
-  Retrieves the magic value from the PE/COFF header.
-
-  @param  Hdr             The buffer in which to return the PE32, PE32+, or TE header.
-
-  @return EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC - Image is PE32
-  @return EFI_IMAGE_NT_OPTIONAL_HDR64_MAGIC - Image is PE32+
-
-**/
-VOID
-CreateHobList (
-  IN VOID   *MemoryBegin,
-  IN UINTN  MemoryLength,
-  IN VOID   *HobBase,
-  IN VOID   *StackBase
-  );
-
 
 /**
   This service enables PEIMs to create various types of HOBs.

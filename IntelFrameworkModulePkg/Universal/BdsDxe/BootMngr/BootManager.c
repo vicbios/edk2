@@ -1,14 +1,8 @@
 /** @file
   The platform boot manager reference implementation
 
-Copyright (c) 2004 - 2015, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -44,7 +38,7 @@ HII_VENDOR_DEVICE_PATH  mBootManagerHiiVendorDevicePath = {
   {
     END_DEVICE_PATH_TYPE,
     END_ENTIRE_DEVICE_PATH_SUBTYPE,
-    { 
+    {
       (UINT8) (END_DEVICE_PATH_LENGTH),
       (UINT8) ((END_DEVICE_PATH_LENGTH) >> 8)
     }
@@ -187,10 +181,10 @@ InitializeBootManager (
 
 /**
   This function invokes Boot Manager. If all devices have not a chance to be connected,
-  the connect all will be triggered. It then enumerate all boot options. If 
+  the connect all will be triggered. It then enumerate all boot options. If
   a boot option from the Boot Manager page is selected, Boot Manager will boot
   from this boot option.
-  
+
 **/
 VOID
 CallBootManager (
@@ -294,7 +288,7 @@ CallBootManager (
       NeedEndOp = FALSE;
       HiiCreateEndOpCode (StartOpCodeHandle);
     }
-    
+
     if (IsLegacyOption && DeviceType != ((BBS_BBS_DEVICE_PATH *) Option->DevicePath)->DeviceType) {
       if (NeedEndOp) {
         HiiCreateEndOpCode (StartOpCodeHandle);
@@ -314,7 +308,7 @@ CallBootManager (
     }
 
     ASSERT (Option->Description != NULL);
-    
+
     Token = HiiSetString (HiiHandle, 0, Option->Description, NULL);
 
     TempStr = DevicePathToStr (Option->DevicePath);

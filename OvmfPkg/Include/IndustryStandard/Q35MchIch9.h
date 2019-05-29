@@ -6,13 +6,7 @@
   Copyright (C) 2015, Red Hat, Inc.
   Copyright (c) 2014, Gabriel L. Somlo <somlo@cmu.edu>
 
-  This program and the accompanying materials are licensed and made available
-  under the terms and conditions of the BSD License which accompanies this
-  distribution.   The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS, WITHOUT
-  WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
 #ifndef __Q35_MCH_ICH9_H__
@@ -33,6 +27,9 @@
 //
 #define DRAMC_REGISTER_Q35(Offset) PCI_LIB_ADDRESS (0, 0, 0, (Offset))
 
+#define MCH_EXT_TSEG_MB       0x50
+#define MCH_EXT_TSEG_MB_QUERY   0xFFFF
+
 #define MCH_GGC               0x52
 #define MCH_GGC_IVD             BIT1
 
@@ -44,6 +41,14 @@
 #define MCH_PCIEXBAR_HIGH     0x64
 #define MCH_PCIEXBAR_HIGHMASK   0xFFFFFFF0
 
+#define MCH_PAM0              0x90
+#define MCH_PAM1              0x91
+#define MCH_PAM2              0x92
+#define MCH_PAM3              0x93
+#define MCH_PAM4              0x94
+#define MCH_PAM5              0x95
+#define MCH_PAM6              0x96
+
 #define MCH_SMRAM             0x9D
 #define MCH_SMRAM_D_LCK         BIT4
 #define MCH_SMRAM_G_SMRAME      BIT3
@@ -54,6 +59,7 @@
 #define MCH_ESMRAMC_SM_CACHE    BIT5
 #define MCH_ESMRAMC_SM_L1       BIT4
 #define MCH_ESMRAMC_SM_L2       BIT3
+#define MCH_ESMRAMC_TSEG_EXT    (BIT2 | BIT1)
 #define MCH_ESMRAMC_TSEG_8MB    BIT2
 #define MCH_ESMRAMC_TSEG_2MB    BIT1
 #define MCH_ESMRAMC_TSEG_1MB    0

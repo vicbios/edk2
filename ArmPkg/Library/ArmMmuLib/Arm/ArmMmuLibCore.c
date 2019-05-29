@@ -3,13 +3,7 @@
 *
 *  Copyright (c) 2011-2016, ARM Limited. All rights reserved.
 *
-*  This program and the accompanying materials
-*  are licensed and made available under the terms and conditions of the BSD License
-*  which accompanies this distribution.  The full text of the license may be found at
-*  http://opensource.org/licenses/bsd-license.php
-*
-*  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-*  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+*  SPDX-License-Identifier: BSD-2-Clause-Patent
 *
 **/
 
@@ -128,11 +122,17 @@ PopulateLevel2PageTable (
   UINT32  SectionDescriptor;
   UINT32  TranslationTable;
   UINT32  BaseSectionAddress;
+  UINT32  FirstPageOffset;
 
   switch (Attributes) {
     case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK:
     case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK:
       PageAttributes = TT_DESCRIPTOR_PAGE_WRITE_BACK;
+      break;
+    case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK_NONSHAREABLE:
+    case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK_NONSHAREABLE:
+      PageAttributes = TT_DESCRIPTOR_PAGE_WRITE_BACK;
+      PageAttributes &= ~TT_DESCRIPTOR_PAGE_S_SHARED;
       break;
     case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_THROUGH:
     case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_THROUGH:
@@ -199,8 +199,11 @@ PopulateLevel2PageTable (
         TT_DESCRIPTOR_SECTION_TYPE_PAGE_TABLE;
   }
 
-  PageEntry = ((UINT32 *)(TranslationTable) + ((PhysicalBase & TT_DESCRIPTOR_PAGE_INDEX_MASK) >> TT_DESCRIPTOR_PAGE_BASE_SHIFT));
+  FirstPageOffset = (PhysicalBase & TT_DESCRIPTOR_PAGE_INDEX_MASK) >> TT_DESCRIPTOR_PAGE_BASE_SHIFT;
+  PageEntry = (UINT32 *)TranslationTable + FirstPageOffset;
   Pages     = RemainLength / TT_DESCRIPTOR_PAGE_SIZE;
+
+  ASSERT (FirstPageOffset + Pages <= TRANSLATION_TABLE_PAGE_COUNT);
 
   for (Index = 0; Index < Pages; Index++) {
     *PageEntry++     =  TT_DESCRIPTOR_PAGE_BASE_ADDRESS(PhysicalBase) | PageAttributes;
@@ -220,6 +223,7 @@ FillTranslationTable (
   UINT32  Attributes;
   UINT32  PhysicalBase;
   UINT64  RemainLength;
+  UINT32  PageMapLength;
 
   ASSERT(MemoryRegion->Length > 0);
 
@@ -234,6 +238,10 @@ FillTranslationTable (
     case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK:
       Attributes = TT_DESCRIPTOR_SECTION_WRITE_BACK(0);
       break;
+    case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK_NONSHAREABLE:
+      Attributes = TT_DESCRIPTOR_SECTION_WRITE_BACK(0);
+      Attributes &= ~TT_DESCRIPTOR_SECTION_S_SHARED;
+      break;
     case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_THROUGH:
       Attributes = TT_DESCRIPTOR_SECTION_WRITE_THROUGH(0);
       break;
@@ -245,6 +253,10 @@ FillTranslationTable (
       break;
     case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK:
       Attributes = TT_DESCRIPTOR_SECTION_WRITE_BACK(1);
+      break;
+    case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK_NONSHAREABLE:
+      Attributes = TT_DESCRIPTOR_SECTION_WRITE_BACK(1);
+      Attributes &= ~TT_DESCRIPTOR_SECTION_S_SHARED;
       break;
     case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_THROUGH:
       Attributes = TT_DESCRIPTOR_SECTION_WRITE_THROUGH(1);
@@ -268,30 +280,31 @@ FillTranslationTable (
   SectionEntry    = TRANSLATION_TABLE_ENTRY_FOR_VIRTUAL_ADDRESS(TranslationTable, MemoryRegion->VirtualBase);
 
   while (RemainLength != 0) {
-    if (PhysicalBase % TT_DESCRIPTOR_SECTION_SIZE == 0) {
-      if (RemainLength >= TT_DESCRIPTOR_SECTION_SIZE) {
-        // Case: Physical address aligned on the Section Size (1MB) && the length is greater than the Section Size
-        *SectionEntry++ = TT_DESCRIPTOR_SECTION_BASE_ADDRESS(PhysicalBase) | Attributes;
-        PhysicalBase += TT_DESCRIPTOR_SECTION_SIZE;
-      } else {
-        // Case: Physical address aligned on the Section Size (1MB) && the length does not fill a section
-        PopulateLevel2PageTable (SectionEntry++, PhysicalBase, RemainLength, MemoryRegion->Attributes);
-
-        // It must be the last entry
-        break;
-      }
+    if (PhysicalBase % TT_DESCRIPTOR_SECTION_SIZE == 0 &&
+        RemainLength >= TT_DESCRIPTOR_SECTION_SIZE) {
+      // Case: Physical address aligned on the Section Size (1MB) && the length
+      // is greater than the Section Size
+      *SectionEntry++ = TT_DESCRIPTOR_SECTION_BASE_ADDRESS(PhysicalBase) | Attributes;
+      PhysicalBase += TT_DESCRIPTOR_SECTION_SIZE;
+      RemainLength -= TT_DESCRIPTOR_SECTION_SIZE;
     } else {
+      PageMapLength = MIN (RemainLength, TT_DESCRIPTOR_SECTION_SIZE -
+                                         (PhysicalBase % TT_DESCRIPTOR_SECTION_SIZE));
+
+      // Case: Physical address aligned on the Section Size (1MB) && the length
+      //       does not fill a section
       // Case: Physical address NOT aligned on the Section Size (1MB)
-      PopulateLevel2PageTable (SectionEntry++, PhysicalBase, RemainLength, MemoryRegion->Attributes);
-      // Aligned the address
-      PhysicalBase = (PhysicalBase + TT_DESCRIPTOR_SECTION_SIZE) & ~(TT_DESCRIPTOR_SECTION_SIZE-1);
+      PopulateLevel2PageTable (SectionEntry++, PhysicalBase, PageMapLength,
+        MemoryRegion->Attributes);
 
       // If it is the last entry
       if (RemainLength < TT_DESCRIPTOR_SECTION_SIZE) {
         break;
       }
+
+      PhysicalBase += PageMapLength;
+      RemainLength -= PageMapLength;
     }
-    RemainLength -= TT_DESCRIPTOR_SECTION_SIZE;
   }
 }
 
@@ -337,17 +350,12 @@ ArmConfigureMmu (
   }
 
   // Translate the Memory Attributes into Translation Table Register Attributes
-  if ((TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_UNCACHED_UNBUFFERED) ||
-      (TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_UNCACHED_UNBUFFERED)) {
-    TTBRAttributes = ArmHasMpExtensions () ? TTBR_MP_NON_CACHEABLE : TTBR_NON_CACHEABLE;
-  } else if ((TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK) ||
+  if ((TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK) ||
       (TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK)) {
     TTBRAttributes = ArmHasMpExtensions () ? TTBR_MP_WRITE_BACK_ALLOC : TTBR_WRITE_BACK_ALLOC;
-  } else if ((TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_WRITE_THROUGH) ||
-      (TranslationTableAttribute == ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_THROUGH)) {
-    TTBRAttributes = ArmHasMpExtensions () ? TTBR_MP_WRITE_THROUGH : TTBR_WRITE_THROUGH;
   } else {
-    ASSERT (0); // No support has been found for the attributes of the memory region that the translation table belongs to.
+    // Page tables must reside in memory mapped as write-back cacheable
+    ASSERT (0);
     return RETURN_UNSUPPORTED;
   }
 
@@ -454,9 +462,6 @@ ConvertSectionToPages (
   for (Index = 0; Index < TRANSLATION_TABLE_PAGE_COUNT; Index++) {
     PageTable[Index] = TT_DESCRIPTOR_PAGE_BASE_ADDRESS(BaseAddress + (Index << 12)) | PageDescriptor;
   }
-
-  // Flush d-cache so descriptors make it back to uncached memory for subsequent table walks
-  WriteBackInvalidateDataCacheRange ((VOID *)PageTable, TT_DESCRIPTOR_PAGE_SIZE);
 
   // Formulate page table entry, Domain=0, NS=0
   PageTableDescriptor = (((UINTN)PageTable) & TT_DESCRIPTOR_SECTION_PAGETABLE_ADDRESS_MASK) | TT_DESCRIPTOR_SECTION_TYPE_PAGE_TABLE;
@@ -591,12 +596,6 @@ UpdatePageEntries (
     if (CurrentPageTableEntry  != PageTableEntry) {
       Mva = (VOID *)(UINTN)((((UINTN)FirstLevelIdx) << TT_DESCRIPTOR_SECTION_BASE_SHIFT) + (PageTableIndex << TT_DESCRIPTOR_PAGE_BASE_SHIFT));
 
-      // Clean/invalidate the cache for this page, but only
-      // if we are modifying the memory type attributes
-      if (((CurrentPageTableEntry ^ PageTableEntry) & TT_DESCRIPTOR_PAGE_CACHE_POLICY_MASK) != 0) {
-        WriteBackInvalidateDataCacheRange (Mva, TT_DESCRIPTOR_PAGE_SIZE);
-      }
-
       // Only need to update if we are changing the entry
       PageTable[PageTableIndex] = PageTableEntry;
       ArmUpdateTranslationTableEntry ((VOID *)&PageTable[PageTableIndex], Mva);
@@ -703,20 +702,18 @@ UpdateSectionEntries (
     } else {
       // still a section entry
 
-      // mask off appropriate fields
-      Descriptor = CurrentDescriptor & ~EntryMask;
+      if (CurrentDescriptor != 0) {
+        // mask off appropriate fields
+        Descriptor = CurrentDescriptor & ~EntryMask;
+      } else {
+        Descriptor = ((UINTN)FirstLevelIdx + i) << TT_DESCRIPTOR_SECTION_BASE_SHIFT;
+      }
 
       // mask in new attributes and/or permissions
       Descriptor |= EntryValue;
 
       if (CurrentDescriptor  != Descriptor) {
-        Mva = (VOID *)(UINTN)(((UINTN)FirstLevelTable) << TT_DESCRIPTOR_SECTION_BASE_SHIFT);
-
-        // Clean/invalidate the cache for this section, but only
-        // if we are modifying the memory type attributes
-        if (((CurrentDescriptor ^ Descriptor) & TT_DESCRIPTOR_SECTION_CACHE_POLICY_MASK) != 0) {
-          WriteBackInvalidateDataCacheRange (Mva, SIZE_1MB);
-        }
+        Mva = (VOID *)(UINTN)(((UINTN)FirstLevelIdx + i) << TT_DESCRIPTOR_SECTION_BASE_SHIFT);
 
         // Only need to update if we are changing the descriptor
         FirstLevelTable[FirstLevelIdx + i] = Descriptor;
@@ -741,6 +738,11 @@ ArmSetMemoryAttributes (
   UINT64        ChunkLength;
   BOOLEAN       FlushTlbs;
 
+  if (BaseAddress > (UINT64)MAX_ADDRESS) {
+    return EFI_UNSUPPORTED;
+  }
+
+  Length = MIN (Length, (UINT64)MAX_ADDRESS - BaseAddress + 1);
   if (Length == 0) {
     return EFI_SUCCESS;
   }

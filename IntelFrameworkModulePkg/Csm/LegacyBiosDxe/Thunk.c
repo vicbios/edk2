@@ -1,16 +1,9 @@
 /** @file
   Call into 16-bit BIOS code, Use AsmThunk16 function of BaseLib.
 
-Copyright (c) 2006 - 2011, Intel Corporation. All rights reserved.<BR>
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
 
-This program and the accompanying materials
-are licensed and made available under the terms and conditions
-of the BSD License which accompanies this distribution.  The
-full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -57,7 +50,8 @@ LegacyBiosInt86 (
   IN  EFI_IA32_REGISTER_SET         *Regs
   )
 {
-  UINT32  *VectorBase;
+  UINT16                Segment;
+  UINT16                Offset;
 
   Regs->X.Flags.Reserved1 = 1;
   Regs->X.Flags.Reserved2 = 0;
@@ -72,12 +66,15 @@ LegacyBiosInt86 (
   // The base address of legacy interrupt vector table is 0.
   // We use this base address to get the legacy interrupt handler.
   //
-  VectorBase              = 0;
-  
+  ACCESS_PAGE0_CODE (
+    Segment               = (UINT16)(((UINT32 *)0)[BiosInt] >> 16);
+    Offset                = (UINT16)((UINT32 *)0)[BiosInt];
+  );
+
   return InternalLegacyBiosFarCall (
            This,
-           (UINT16) ((VectorBase)[BiosInt] >> 16),
-           (UINT16) (VectorBase)[BiosInt],
+           Segment,
+           Offset,
            Regs,
            &Regs->X.Flags,
            sizeof (Regs->X.Flags)
@@ -127,7 +124,7 @@ LegacyBiosFarCall86 (
 }
 
 /**
-  Provide NULL interrupt handler which is used to check 
+  Provide NULL interrupt handler which is used to check
   if there is more than one HW interrupt registers with the CPU AP.
 
   @param  InterruptType - The type of interrupt that occured
@@ -214,7 +211,7 @@ InternalLegacyBiosFarCall (
   // Disable DXE Timer while executing in real mode
   //
   Private->Timer->SetTimerPeriod (Private->Timer, 0);
- 
+
   //
   // Save and disable interrupt of debug timer
   //
@@ -227,14 +224,14 @@ InternalLegacyBiosFarCall (
 
   //
   // Check to see if there is more than one HW interrupt registers with the CPU AP.
-  // If there is, then ASSERT() since that is not compatible with the CSM because 
-  // interupts other than the Timer interrupt that was disabled above can not be 
+  // If there is, then ASSERT() since that is not compatible with the CSM because
+  // interupts other than the Timer interrupt that was disabled above can not be
   // handled properly from real mode.
   //
   DEBUG_CODE (
     UINTN  Vector;
     UINTN  Count;
-    
+
     for (Vector = 0x20, Count = 0; Vector < 0x100; Vector++) {
       Status = Private->Cpu->RegisterInterruptHandler (Private->Cpu, Vector, LegacyBiosNullInterruptHandler);
       if (Status == EFI_ALREADY_STARTED) {
@@ -251,14 +248,14 @@ InternalLegacyBiosFarCall (
   );
 
   //
-  // If the Timer AP has enabled the 8254 timer IRQ and the current 8254 timer 
-  // period is less than the CSM required rate of 54.9254, then force the 8254 
+  // If the Timer AP has enabled the 8254 timer IRQ and the current 8254 timer
+  // period is less than the CSM required rate of 54.9254, then force the 8254
   // PIT counter to 0, which is the CSM required rate of 54.9254 ms
   //
   if (Private->TimerUses8254 && TimerPeriod < 549254) {
     SetPitCount (0);
   }
-  
+
   if (Stack != NULL && StackSize != 0) {
     //
     // Copy Stack to low memory stack
@@ -281,23 +278,6 @@ InternalLegacyBiosFarCall (
   ASSERT_EFI_ERROR (Status);
 
   AsmThunk16 (&mThunkContext);
-
-  //
-  // OPROM may allocate EBDA range by itself and change EBDA base and EBDA size.
-  // Get the current EBDA base address, and compared with pre-allocate minimum
-  // EBDA base address, if the current EBDA base address is smaller, it indicates
-  // PcdEbdaReservedMemorySize should be adjusted to larger for more OPROMs.
-  //
-  DEBUG_CODE (
-    {
-      UINTN                 EbdaBaseAddress;
-      UINTN                 ReservedEbdaBaseAddress;
-
-      EbdaBaseAddress = (*(UINT16 *) (UINTN) 0x40E) << 4;
-      ReservedEbdaBaseAddress = CONVENTIONAL_MEMORY_TOP - PcdGet32 (PcdEbdaReservedMemorySize);
-      ASSERT (ReservedEbdaBaseAddress <= EbdaBaseAddress);
-    }
-  );
 
   if (Stack != NULL && StackSize != 0) {
     //
@@ -323,7 +303,27 @@ InternalLegacyBiosFarCall (
   // End critical section
   //
   gBS->RestoreTPL (OriginalTpl);
-  
+
+  //
+  // OPROM may allocate EBDA range by itself and change EBDA base and EBDA size.
+  // Get the current EBDA base address, and compared with pre-allocate minimum
+  // EBDA base address, if the current EBDA base address is smaller, it indicates
+  // PcdEbdaReservedMemorySize should be adjusted to larger for more OPROMs.
+  //
+  DEBUG_CODE (
+    {
+      UINTN                 EbdaBaseAddress;
+      UINTN                 ReservedEbdaBaseAddress;
+
+      ACCESS_PAGE0_CODE (
+        EbdaBaseAddress = (*(UINT16 *) (UINTN) 0x40E) << 4;
+        ReservedEbdaBaseAddress = CONVENTIONAL_MEMORY_TOP
+                                  - PcdGet32 (PcdEbdaReservedMemorySize);
+        ASSERT (ReservedEbdaBaseAddress <= EbdaBaseAddress);
+      );
+    }
+  );
+
   //
   // Restore interrupt of debug timer
   //
@@ -378,27 +378,27 @@ LegacyBiosInitializeThunk (
   TimerVector = 0;
   Status = Private->Legacy8259->GetVector (Private->Legacy8259, Efi8259Irq0, &TimerVector);
   ASSERT_EFI_ERROR (Status);
-  
+
   //
   // Check to see if the Timer AP has hooked the IRQ0 from the 8254 PIT
-  //  
+  //
   Status = Private->Cpu->RegisterInterruptHandler (
-                           Private->Cpu, 
-                           TimerVector, 
+                           Private->Cpu,
+                           TimerVector,
                            LegacyBiosNullInterruptHandler
                            );
   if (Status == EFI_SUCCESS) {
     //
-    // If the Timer AP has not enabled the 8254 timer IRQ, then force the 8254 PIT 
+    // If the Timer AP has not enabled the 8254 timer IRQ, then force the 8254 PIT
     // counter to 0, which is the CSM required rate of 54.9254 ms
     //
     Private->Cpu->RegisterInterruptHandler (
-                    Private->Cpu, 
-                    TimerVector, 
+                    Private->Cpu,
+                    TimerVector,
                     NULL
                     );
     SetPitCount (0);
-    
+
     //
     // Save status that the Timer AP is not using the 8254 PIT
     //
@@ -414,6 +414,6 @@ LegacyBiosInitializeThunk (
     //
     ASSERT (FALSE);
   }
-  
+
   return EFI_SUCCESS;
 }

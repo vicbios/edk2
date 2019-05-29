@@ -1,14 +1,8 @@
 /** @file
   EFI PCAT ISA ACPI Driver for a Generic PC Platform
 
-Copyright (c) 2006 - 2014, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -42,8 +36,8 @@ PcatIsaAcpiDriverEntryPoint (
   )
 {
   return EfiLibInstallDriverBindingComponentName2 (
-           ImageHandle, 
-           SystemTable, 
+           ImageHandle,
+           SystemTable,
            &gPcatIsaAcpiDriverBinding,
            ImageHandle,
            &gPcatIsaAcpiComponentName,
@@ -54,7 +48,7 @@ PcatIsaAcpiDriverEntryPoint (
 /**
   ControllerDriver Protocol Method
 
-  @param This                 Driver Binding protocol instance pointer.   
+  @param This                 Driver Binding protocol instance pointer.
   @param Controller           Handle of device to test.
   @param RemainingDevicePath  Optional parameter use to pick a specific child
                               device to start.
@@ -80,10 +74,10 @@ PcatIsaAcpiDriverBindingSupported (
 
   //
   // Get PciIo protocol instance
-  //              
+  //
   Status = gBS->OpenProtocol (
-                  Controller,  
-                  &gEfiPciIoProtocolGuid, 
+                  Controller,
+                  &gEfiPciIoProtocolGuid,
                   (VOID**)&PciIo,
                   This->DriverBindingHandle,
                   Controller,
@@ -97,7 +91,7 @@ PcatIsaAcpiDriverBindingSupported (
                     PciIo,
                     EfiPciIoWidthUint32,
                     0,
-                    sizeof(Pci) / sizeof(UINT32), 
+                    sizeof(Pci) / sizeof(UINT32),
                     &Pci);
 
   if (!EFI_ERROR (Status)) {
@@ -109,23 +103,23 @@ PcatIsaAcpiDriverBindingSupported (
         //
         if (Pci.Hdr.ClassCode[1] == PCI_CLASS_BRIDGE_ISA) {
           Status = EFI_SUCCESS;
-        } 
+        }
 
         //
         // See if this is an Intel PCI to ISA bridge in Positive Decode Mode
         //
-        if (Pci.Hdr.ClassCode[1] == PCI_CLASS_BRIDGE_ISA_PDECODE && 
+        if (Pci.Hdr.ClassCode[1] == PCI_CLASS_BRIDGE_ISA_PDECODE &&
             Pci.Hdr.VendorId     == 0x8086                          ) {
           //
-          // See if this is on Function #0 to avoid false positives on 
-          // PCI_CLASS_BRIDGE_OTHER that has the same value as 
+          // See if this is on Function #0 to avoid false positives on
+          // PCI_CLASS_BRIDGE_OTHER that has the same value as
           // PCI_CLASS_BRIDGE_ISA_PDECODE
           //
           Status = PciIo->GetLocation (
-                            PciIo, 
-                            &SegmentNumber, 
-                            &BusNumber, 
-                            &DeviceNumber, 
+                            PciIo,
+                            &SegmentNumber,
+                            &BusNumber,
+                            &DeviceNumber,
                             &FunctionNumber
                             );
           if (!EFI_ERROR (Status) && FunctionNumber == 0) {
@@ -134,17 +128,17 @@ PcatIsaAcpiDriverBindingSupported (
             Status = EFI_UNSUPPORTED;
           }
         }
-      } 
+      }
     }
   }
 
   gBS->CloseProtocol (
-         Controller,       
-         &gEfiPciIoProtocolGuid, 
-         This->DriverBindingHandle,   
-         Controller   
+         Controller,
+         &gEfiPciIoProtocolGuid,
+         This->DriverBindingHandle,
+         Controller
          );
-  
+
   return Status;
 }
 
@@ -172,22 +166,24 @@ PcatIsaAcpiDriverBindingStart (
   EFI_PCI_IO_PROTOCOL  *PciIo;
   PCAT_ISA_ACPI_DEV    *PcatIsaAcpiDev;
   UINT64               Supports;
+  UINT64               OriginalAttributes;
   BOOLEAN              Enabled;
 
   Enabled = FALSE;
   Supports = 0;
   PcatIsaAcpiDev = NULL;
+  OriginalAttributes = 0;
   //
   // Open the PCI I/O Protocol Interface
   //
   PciIo = NULL;
   Status = gBS->OpenProtocol (
-                  Controller,       
-                  &gEfiPciIoProtocolGuid, 
+                  Controller,
+                  &gEfiPciIoProtocolGuid,
                   (VOID**)&PciIo,
-                  This->DriverBindingHandle,   
-                  Controller,   
-                  EFI_OPEN_PROTOCOL_BY_DRIVER 
+                  This->DriverBindingHandle,
+                  Controller,
+                  EFI_OPEN_PROTOCOL_BY_DRIVER
                   );
   if (EFI_ERROR (Status)) {
     goto Done;
@@ -210,19 +206,29 @@ PcatIsaAcpiDriverBindingStart (
   if (Supports == 0 || Supports == (EFI_PCI_IO_ATTRIBUTE_ISA_IO | EFI_PCI_IO_ATTRIBUTE_ISA_IO_16)) {
     Status = EFI_UNSUPPORTED;
     goto Done;
-  }  
+  }
 
-  Enabled = TRUE;
   Status = PciIo->Attributes (
-                    PciIo, 
-                    EfiPciIoAttributeOperationEnable, 
-                    EFI_PCI_DEVICE_ENABLE | Supports | EFI_PCI_IO_ATTRIBUTE_ISA_MOTHERBOARD_IO, 
-                    NULL 
+                    PciIo,
+                    EfiPciIoAttributeOperationGet,
+                    0,
+                    &OriginalAttributes
                     );
   if (EFI_ERROR (Status)) {
     goto Done;
   }
-  
+
+  Status = PciIo->Attributes (
+                    PciIo,
+                    EfiPciIoAttributeOperationEnable,
+                    EFI_PCI_DEVICE_ENABLE | Supports | EFI_PCI_IO_ATTRIBUTE_ISA_MOTHERBOARD_IO,
+                    NULL
+                    );
+  if (EFI_ERROR (Status)) {
+    goto Done;
+  }
+
+  Enabled = TRUE;
   //
   // Allocate memory for the PCAT ISA ACPI Device structure
   //
@@ -239,15 +245,16 @@ PcatIsaAcpiDriverBindingStart (
   //
   // Initialize the PCAT ISA ACPI Device structure
   //
-  PcatIsaAcpiDev->Signature = PCAT_ISA_ACPI_DEV_SIGNATURE;
-  PcatIsaAcpiDev->Handle    = Controller;
-  PcatIsaAcpiDev->PciIo     = PciIo;
+  PcatIsaAcpiDev->Signature          = PCAT_ISA_ACPI_DEV_SIGNATURE;
+  PcatIsaAcpiDev->Handle             = Controller;
+  PcatIsaAcpiDev->PciIo              = PciIo;
+  PcatIsaAcpiDev->OriginalAttributes = OriginalAttributes;
 
   //
   // Initialize PcatIsaAcpiDeviceList
   //
   InitializePcatIsaAcpiDeviceList ();
-  
+
   //
   // IsaAcpi interface
   //
@@ -259,7 +266,7 @@ PcatIsaAcpiDriverBindingStart (
   (PcatIsaAcpiDev->IsaAcpi).EnableDevice     = IsaEnableDevice;
   (PcatIsaAcpiDev->IsaAcpi).InitDevice       = IsaInitDevice;
   (PcatIsaAcpiDev->IsaAcpi).InterfaceInit    = IsaInterfaceInit;
-    
+
   //
   // Install the ISA ACPI Protocol interface
   //
@@ -273,16 +280,16 @@ Done:
   if (EFI_ERROR (Status)) {
     if (PciIo != NULL && Enabled) {
       PciIo->Attributes (
-               PciIo, 
-               EfiPciIoAttributeOperationDisable, 
-               EFI_PCI_DEVICE_ENABLE | Supports | EFI_PCI_IO_ATTRIBUTE_ISA_MOTHERBOARD_IO,
-               NULL 
+               PciIo,
+               EfiPciIoAttributeOperationSet,
+               OriginalAttributes,
+               NULL
                );
     }
     gBS->CloseProtocol (
-           Controller, 
-           &gEfiPciIoProtocolGuid, 
-           This->DriverBindingHandle, 
+           Controller,
+           &gEfiPciIoProtocolGuid,
+           This->DriverBindingHandle,
            Controller
            );
     if (PcatIsaAcpiDev != NULL) {
@@ -290,7 +297,7 @@ Done:
     }
     return Status;
   }
-          
+
   return EFI_SUCCESS;
 }
 
@@ -321,17 +328,16 @@ PcatIsaAcpiDriverBindingStop (
   EFI_STATUS             Status;
   EFI_ISA_ACPI_PROTOCOL  *IsaAcpi;
   PCAT_ISA_ACPI_DEV      *PcatIsaAcpiDev;
-  UINT64                 Supports;
-  
+
   //
   // Get the ISA ACPI Protocol Interface
-  // 
+  //
   Status = gBS->OpenProtocol (
-                  Controller, 
-                  &gEfiIsaAcpiProtocolGuid, 
+                  Controller,
+                  &gEfiIsaAcpiProtocolGuid,
                   (VOID**)&IsaAcpi,
-                  This->DriverBindingHandle,   
-                  Controller,   
+                  This->DriverBindingHandle,
+                  Controller,
                   EFI_OPEN_PROTOCOL_GET_PROTOCOL
                   );
   if (EFI_ERROR (Status)) {
@@ -344,27 +350,18 @@ PcatIsaAcpiDriverBindingStop (
   PcatIsaAcpiDev = PCAT_ISA_ACPI_DEV_FROM_THIS (IsaAcpi);
 
   //
-  // Get supported PCI attributes
+  // Restore PCI attributes
   //
   Status = PcatIsaAcpiDev->PciIo->Attributes (
                                     PcatIsaAcpiDev->PciIo,
-                                    EfiPciIoAttributeOperationSupported,
-                                    0,
-                                    &Supports
+                                    EfiPciIoAttributeOperationSet,
+                                    PcatIsaAcpiDev->OriginalAttributes,
+                                    NULL
                                     );
   if (EFI_ERROR (Status)) {
     return Status;
   }
 
-  Supports &= (UINT64) (EFI_PCI_IO_ATTRIBUTE_ISA_IO | EFI_PCI_IO_ATTRIBUTE_ISA_IO_16);
-
-  PcatIsaAcpiDev->PciIo->Attributes (
-                           PcatIsaAcpiDev->PciIo, 
-                           EfiPciIoAttributeOperationDisable, 
-                           EFI_PCI_DEVICE_ENABLE | Supports | EFI_PCI_IO_ATTRIBUTE_ISA_MOTHERBOARD_IO,
-                           NULL 
-                           );
- 
   //
   // Uninstall protocol interface: EFI_ISA_ACPI_PROTOCOL
   //
@@ -377,13 +374,13 @@ PcatIsaAcpiDriverBindingStop (
   }
 
   gBS->CloseProtocol (
-         Controller, 
-         &gEfiPciIoProtocolGuid, 
-         This->DriverBindingHandle, 
+         Controller,
+         &gEfiPciIoProtocolGuid,
+         This->DriverBindingHandle,
          Controller
          );
-  
+
   gBS->FreePool (PcatIsaAcpiDev);
-  
+
   return EFI_SUCCESS;
 }

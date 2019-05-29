@@ -4,13 +4,7 @@
   Copyright (c) 2008 - 2014, Intel Corporation. All rights reserved.<BR>
   Copyright (C) 2012-2014, Red Hat, Inc.
 
-  This program and the accompanying materials are licensed and made available
-  under the terms and conditions of the BSD License which accompanies this
-  distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS, WITHOUT
-  WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -100,12 +94,204 @@ BlobCompare (
 
 
 /**
+  Comparator function for two opaque pointers, ordering on (unsigned) pointer
+  value itself.
+  Can be used as both Key and UserStruct comparator.
+
+  @param[in] Pointer1  First pointer.
+
+  @param[in] Pointer2  Second pointer.
+
+  @retval <0  If Pointer1 compares less than Pointer2.
+
+  @retval  0  If Pointer1 compares equal to Pointer2.
+
+  @retval >0  If Pointer1 compares greater than Pointer2.
+**/
+STATIC
+INTN
+EFIAPI
+PointerCompare (
+  IN CONST VOID *Pointer1,
+  IN CONST VOID *Pointer2
+  )
+{
+  if (Pointer1 == Pointer2) {
+    return 0;
+  }
+  if ((UINTN)Pointer1 < (UINTN)Pointer2) {
+    return -1;
+  }
+  return 1;
+}
+
+
+/**
+  Comparator function for two ASCII strings. Can be used as both Key and
+  UserStruct comparator.
+
+  This function exists solely so we can avoid casting &AsciiStrCmp to
+  ORDERED_COLLECTION_USER_COMPARE and ORDERED_COLLECTION_KEY_COMPARE.
+
+  @param[in] AsciiString1  Pointer to the first ASCII string.
+
+  @param[in] AsciiString2  Pointer to the second ASCII string.
+
+  @return  The return value of AsciiStrCmp (AsciiString1, AsciiString2).
+**/
+STATIC
+INTN
+EFIAPI
+AsciiStringCompare (
+  IN CONST VOID *AsciiString1,
+  IN CONST VOID *AsciiString2
+  )
+{
+  return AsciiStrCmp (AsciiString1, AsciiString2);
+}
+
+
+/**
+  Release the ORDERED_COLLECTION structure populated by
+  CollectAllocationsRestrictedTo32Bit() (below).
+
+  This function may be called by CollectAllocationsRestrictedTo32Bit() itself,
+  on the error path.
+
+  @param[in] AllocationsRestrictedTo32Bit  The ORDERED_COLLECTION structure to
+                                           release.
+**/
+STATIC
+VOID
+ReleaseAllocationsRestrictedTo32Bit (
+  IN ORDERED_COLLECTION *AllocationsRestrictedTo32Bit
+)
+{
+  ORDERED_COLLECTION_ENTRY *Entry, *Entry2;
+
+  for (Entry = OrderedCollectionMin (AllocationsRestrictedTo32Bit);
+       Entry != NULL;
+       Entry = Entry2) {
+    Entry2 = OrderedCollectionNext (Entry);
+    OrderedCollectionDelete (AllocationsRestrictedTo32Bit, Entry, NULL);
+  }
+  OrderedCollectionUninit (AllocationsRestrictedTo32Bit);
+}
+
+
+/**
+  Iterate over the linker/loader script, and collect the names of the fw_cfg
+  blobs that are referenced by QEMU_LOADER_ADD_POINTER.PointeeFile fields, such
+  that QEMU_LOADER_ADD_POINTER.PointerSize is less than 8. This means that the
+  pointee blob's address will have to be patched into a narrower-than-8 byte
+  pointer field, hence the pointee blob must not be allocated from 64-bit
+  address space.
+
+  @param[out] AllocationsRestrictedTo32Bit  The ORDERED_COLLECTION structure
+                                            linking (not copying / owning) such
+                                            QEMU_LOADER_ADD_POINTER.PointeeFile
+                                            fields that name the blobs
+                                            restricted from 64-bit allocation.
+
+  @param[in] LoaderStart                    Points to the first entry in the
+                                            linker/loader script.
+
+  @param[in] LoaderEnd                      Points one past the last entry in
+                                            the linker/loader script.
+
+  @retval EFI_SUCCESS           AllocationsRestrictedTo32Bit has been
+                                populated.
+
+  @retval EFI_OUT_OF_RESOURCES  Memory allocation failed.
+
+  @retval EFI_PROTOCOL_ERROR    Invalid linker/loader script contents.
+**/
+STATIC
+EFI_STATUS
+CollectAllocationsRestrictedTo32Bit (
+  OUT ORDERED_COLLECTION     **AllocationsRestrictedTo32Bit,
+  IN CONST QEMU_LOADER_ENTRY *LoaderStart,
+  IN CONST QEMU_LOADER_ENTRY *LoaderEnd
+)
+{
+  ORDERED_COLLECTION      *Collection;
+  CONST QEMU_LOADER_ENTRY *LoaderEntry;
+  EFI_STATUS              Status;
+
+  Collection = OrderedCollectionInit (AsciiStringCompare, AsciiStringCompare);
+  if (Collection == NULL) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  for (LoaderEntry = LoaderStart; LoaderEntry < LoaderEnd; ++LoaderEntry) {
+    CONST QEMU_LOADER_ADD_POINTER *AddPointer;
+
+    if (LoaderEntry->Type != QemuLoaderCmdAddPointer) {
+      continue;
+    }
+    AddPointer = &LoaderEntry->Command.AddPointer;
+
+    if (AddPointer->PointerSize >= 8) {
+      continue;
+    }
+
+    if (AddPointer->PointeeFile[QEMU_LOADER_FNAME_SIZE - 1] != '\0') {
+      DEBUG ((DEBUG_ERROR, "%a: malformed file name\n", __FUNCTION__));
+      Status = EFI_PROTOCOL_ERROR;
+      goto RollBack;
+    }
+
+    Status = OrderedCollectionInsert (
+               Collection,
+               NULL,                           // Entry
+               (VOID *)AddPointer->PointeeFile
+               );
+    switch (Status) {
+    case EFI_SUCCESS:
+      DEBUG ((
+        DEBUG_VERBOSE,
+        "%a: restricting blob \"%a\" from 64-bit allocation\n",
+        __FUNCTION__,
+        AddPointer->PointeeFile
+        ));
+      break;
+    case EFI_ALREADY_STARTED:
+      //
+      // The restriction has been recorded already.
+      //
+      break;
+    case EFI_OUT_OF_RESOURCES:
+      goto RollBack;
+    default:
+      ASSERT (FALSE);
+    }
+  }
+
+  *AllocationsRestrictedTo32Bit = Collection;
+  return EFI_SUCCESS;
+
+RollBack:
+  ReleaseAllocationsRestrictedTo32Bit (Collection);
+  return Status;
+}
+
+
+/**
   Process a QEMU_LOADER_ALLOCATE command.
 
-  @param[in] Allocate     The QEMU_LOADER_ALLOCATE command to process.
+  @param[in] Allocate                      The QEMU_LOADER_ALLOCATE command to
+                                           process.
 
-  @param[in,out] Tracker  The ORDERED_COLLECTION tracking the BLOB user
-                          structures created thus far.
+  @param[in,out] Tracker                   The ORDERED_COLLECTION tracking the
+                                           BLOB user structures created thus
+                                           far.
+
+  @param[in] AllocationsRestrictedTo32Bit  The ORDERED_COLLECTION populated by
+                                           the function
+                                           CollectAllocationsRestrictedTo32Bit,
+                                           naming the fw_cfg blobs that must
+                                           not be allocated from 64-bit address
+                                           space.
 
   @retval EFI_SUCCESS           An area of whole AcpiNVS pages has been
                                 allocated for the blob contents, and the
@@ -131,7 +317,8 @@ EFI_STATUS
 EFIAPI
 ProcessCmdAllocate (
   IN CONST QEMU_LOADER_ALLOCATE *Allocate,
-  IN OUT ORDERED_COLLECTION     *Tracker
+  IN OUT ORDERED_COLLECTION     *Tracker,
+  IN ORDERED_COLLECTION         *AllocationsRestrictedTo32Bit
   )
 {
   FIRMWARE_CONFIG_ITEM FwCfgItem;
@@ -160,7 +347,13 @@ ProcessCmdAllocate (
   }
 
   NumPages = EFI_SIZE_TO_PAGES (FwCfgSize);
-  Address = 0xFFFFFFFF;
+  Address = MAX_UINT64;
+  if (OrderedCollectionFind (
+        AllocationsRestrictedTo32Bit,
+        Allocate->File
+        ) != NULL) {
+    Address = MAX_UINT32;
+  }
   Status = gBS->AllocatePages (AllocateMaxAddress, EfiACPIMemoryNVS, NumPages,
                   &Address);
   if (EFI_ERROR (Status)) {
@@ -557,6 +750,16 @@ UndoCmdWritePointer (
                                command identified an ACPI table that is
                                different from RSDT and XSDT.
 
+  @param[in,out] SeenPointers  The ORDERED_COLLECTION tracking the absolute
+                               target addresses that have been pointed-to by
+                               QEMU_LOADER_ADD_POINTER commands thus far. If a
+                               target address is encountered for the first
+                               time, and it identifies an ACPI table that is
+                               different from RDST and XSDT, the table is
+                               installed. If a target address is seen for the
+                               second or later times, it is skipped without
+                               taking any action.
+
   @retval EFI_INVALID_PARAMETER  NumInstalled was outside the allowed range on
                                  input.
 
@@ -564,14 +767,15 @@ UndoCmdWritePointer (
                                  table different from RSDT and XSDT, but there
                                  was no more room in InstalledKey.
 
-  @retval EFI_SUCCESS            AddPointer has been processed. Either an ACPI
-                                 table different from RSDT and XSDT has been
-                                 installed (reflected by InstalledKey and
-                                 NumInstalled), or RSDT or XSDT has been
-                                 identified but not installed, or the fw_cfg
-                                 blob pointed-into by AddPointer has been
-                                 marked as hosting something else than just
-                                 direct ACPI table contents.
+  @retval EFI_SUCCESS            AddPointer has been processed. Either its
+                                 absolute target address has been encountered
+                                 before, or an ACPI table different from RSDT
+                                 and XSDT has been installed (reflected by
+                                 InstalledKey and NumInstalled), or RSDT or
+                                 XSDT has been identified but not installed, or
+                                 the fw_cfg blob pointed-into by AddPointer has
+                                 been marked as hosting something else than
+                                 just direct ACPI table contents.
 
   @return                        Error codes returned by
                                  AcpiProtocol->InstallAcpiTable().
@@ -584,11 +788,13 @@ Process2ndPassCmdAddPointer (
   IN     CONST ORDERED_COLLECTION      *Tracker,
   IN     EFI_ACPI_TABLE_PROTOCOL       *AcpiProtocol,
   IN OUT UINTN                         InstalledKey[INSTALLED_TABLES_MAX],
-  IN OUT INT32                         *NumInstalled
+  IN OUT INT32                         *NumInstalled,
+  IN OUT ORDERED_COLLECTION            *SeenPointers
   )
 {
   CONST ORDERED_COLLECTION_ENTRY                     *TrackerEntry;
   CONST ORDERED_COLLECTION_ENTRY                     *TrackerEntry2;
+  ORDERED_COLLECTION_ENTRY                           *SeenPointerEntry;
   CONST BLOB                                         *Blob;
   BLOB                                               *Blob2;
   CONST UINT8                                        *PointerField;
@@ -619,6 +825,27 @@ Process2ndPassCmdAddPointer (
   ASSERT(PointerValue >= Blob2Remaining);
   Blob2Remaining += Blob2->Size;
   ASSERT (PointerValue < Blob2Remaining);
+
+  Status = OrderedCollectionInsert (
+             SeenPointers,
+             &SeenPointerEntry, // for reverting insertion in error case
+             (VOID *)(UINTN)PointerValue
+             );
+  if (EFI_ERROR (Status)) {
+    if (Status == RETURN_ALREADY_STARTED) {
+      //
+      // Already seen this pointer, don't try to process it again.
+      //
+      DEBUG ((
+        DEBUG_VERBOSE,
+        "%a: PointerValue=0x%Lx already processed, skipping.\n",
+        __FUNCTION__,
+        PointerValue
+        ));
+      Status = EFI_SUCCESS;
+    }
+    return Status;
+  }
 
   Blob2Remaining -= (UINTN) PointerValue;
   DEBUG ((EFI_D_VERBOSE, "%a: checking for ACPI header in \"%a\" at 0x%Lx "
@@ -682,7 +909,8 @@ Process2ndPassCmdAddPointer (
   if (*NumInstalled == INSTALLED_TABLES_MAX) {
     DEBUG ((EFI_D_ERROR, "%a: can't install more than %d tables\n",
       __FUNCTION__, INSTALLED_TABLES_MAX));
-    return EFI_OUT_OF_RESOURCES;
+    Status = EFI_OUT_OF_RESOURCES;
+    goto RollbackSeenPointer;
   }
 
   Status = AcpiProtocol->InstallAcpiTable (AcpiProtocol,
@@ -691,10 +919,14 @@ Process2ndPassCmdAddPointer (
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "%a: InstallAcpiTable(): %r\n", __FUNCTION__,
       Status));
-    return Status;
+    goto RollbackSeenPointer;
   }
   ++*NumInstalled;
   return EFI_SUCCESS;
+
+RollbackSeenPointer:
+  OrderedCollectionDelete (SeenPointers, SeenPointerEntry, NULL);
+  return Status;
 }
 
 
@@ -734,11 +966,14 @@ InstallQemuFwCfgTables (
   CONST QEMU_LOADER_ENTRY  *WritePointerSubsetEnd;
   ORIGINAL_ATTRIBUTES      *OriginalPciAttributes;
   UINTN                    OriginalPciAttributesCount;
+  ORDERED_COLLECTION       *AllocationsRestrictedTo32Bit;
   S3_CONTEXT               *S3Context;
   ORDERED_COLLECTION       *Tracker;
   UINTN                    *InstalledKey;
   INT32                    Installed;
   ORDERED_COLLECTION_ENTRY *TrackerEntry, *TrackerEntry2;
+  ORDERED_COLLECTION       *SeenPointers;
+  ORDERED_COLLECTION_ENTRY *SeenPointerEntry, *SeenPointerEntry2;
 
   Status = QemuFwCfgFindFile ("etc/table-loader", &FwCfgItem, &FwCfgSize);
   if (EFI_ERROR (Status)) {
@@ -760,6 +995,16 @@ InstallQemuFwCfgTables (
   RestorePciDecoding (OriginalPciAttributes, OriginalPciAttributesCount);
   LoaderEnd = LoaderStart + FwCfgSize / sizeof *LoaderEntry;
 
+  AllocationsRestrictedTo32Bit = NULL;
+  Status = CollectAllocationsRestrictedTo32Bit (
+             &AllocationsRestrictedTo32Bit,
+             LoaderStart,
+             LoaderEnd
+             );
+  if (EFI_ERROR (Status)) {
+    goto FreeLoader;
+  }
+
   S3Context = NULL;
   if (QemuFwCfgS3Enabled ()) {
     //
@@ -768,7 +1013,7 @@ InstallQemuFwCfgTables (
     //
     Status = AllocateS3Context (&S3Context, LoaderEnd - LoaderStart);
     if (EFI_ERROR (Status)) {
-      goto FreeLoader;
+      goto FreeAllocationsRestrictedTo32Bit;
     }
   }
 
@@ -789,7 +1034,11 @@ InstallQemuFwCfgTables (
   for (LoaderEntry = LoaderStart; LoaderEntry < LoaderEnd; ++LoaderEntry) {
     switch (LoaderEntry->Type) {
     case QemuLoaderCmdAllocate:
-      Status = ProcessCmdAllocate (&LoaderEntry->Command.Allocate, Tracker);
+      Status = ProcessCmdAllocate (
+                 &LoaderEntry->Command.Allocate,
+                 Tracker,
+                 AllocationsRestrictedTo32Bit
+                 );
       break;
 
     case QemuLoaderCmdAddPointer:
@@ -827,14 +1076,26 @@ InstallQemuFwCfgTables (
     goto RollbackWritePointersAndFreeTracker;
   }
 
+  SeenPointers = OrderedCollectionInit (PointerCompare, PointerCompare);
+  if (SeenPointers == NULL) {
+    Status = EFI_OUT_OF_RESOURCES;
+    goto FreeKeys;
+  }
+
   //
   // second pass: identify and install ACPI tables
   //
   Installed = 0;
   for (LoaderEntry = LoaderStart; LoaderEntry < LoaderEnd; ++LoaderEntry) {
     if (LoaderEntry->Type == QemuLoaderCmdAddPointer) {
-      Status = Process2ndPassCmdAddPointer (&LoaderEntry->Command.AddPointer,
-                 Tracker, AcpiProtocol, InstalledKey, &Installed);
+      Status = Process2ndPassCmdAddPointer (
+                 &LoaderEntry->Command.AddPointer,
+                 Tracker,
+                 AcpiProtocol,
+                 InstalledKey,
+                 &Installed,
+                 SeenPointers
+                 );
       if (EFI_ERROR (Status)) {
         goto UninstallAcpiTables;
       }
@@ -870,6 +1131,15 @@ UninstallAcpiTables:
     DEBUG ((EFI_D_INFO, "%a: installed %d tables\n", __FUNCTION__, Installed));
   }
 
+  for (SeenPointerEntry = OrderedCollectionMin (SeenPointers);
+       SeenPointerEntry != NULL;
+       SeenPointerEntry = SeenPointerEntry2) {
+    SeenPointerEntry2 = OrderedCollectionNext (SeenPointerEntry);
+    OrderedCollectionDelete (SeenPointers, SeenPointerEntry, NULL);
+  }
+  OrderedCollectionUninit (SeenPointers);
+
+FreeKeys:
   FreePool (InstalledKey);
 
 RollbackWritePointersAndFreeTracker:
@@ -914,6 +1184,9 @@ FreeS3Context:
   if (S3Context != NULL) {
     ReleaseS3Context (S3Context);
   }
+
+FreeAllocationsRestrictedTo32Bit:
+  ReleaseAllocationsRestrictedTo32Bit (AllocationsRestrictedTo32Bit);
 
 FreeLoader:
   FreePool (LoaderStart);

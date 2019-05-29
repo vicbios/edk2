@@ -1,14 +1,8 @@
 /** @file
 Converts a pe32+ image to an FW, Te image type, or other specific image.
 
-Copyright (c) 2004 - 2016, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -92,6 +86,7 @@ CHAR8  *mInImageName;
 UINT32 mImageTimeStamp = 0;
 UINT32 mImageSize = 0;
 UINT32 mOutImageType = FW_DUMMY_IMAGE;
+BOOLEAN mIsConvertXip = FALSE;
 
 
 STATIC
@@ -168,19 +163,20 @@ Returns:
   //
   // Copyright declaration
   //
-  fprintf (stdout, "Copyright (c) 2007 - 2015, Intel Corporation. All rights reserved.\n\n");
+  fprintf (stdout, "Copyright (c) 2007 - 2018, Intel Corporation. All rights reserved.\n\n");
 
   //
   // Details Option
   //
   fprintf (stdout, "Options:\n");
   fprintf (stdout, "  -o FileName, --outputfile FileName\n\
-                        File will be created to store the ouput content.\n");
+                        File will be created to store the output content.\n");
   fprintf (stdout, "  -e EFI_FILETYPE, --efiImage EFI_FILETYPE\n\
                         Create Efi Image. EFI_FILETYPE is one of BASE,SMM_CORE,\n\
                         PEI_CORE, PEIM, DXE_CORE, DXE_DRIVER, UEFI_APPLICATION,\n\
                         SEC, DXE_SAL_DRIVER, UEFI_DRIVER, DXE_RUNTIME_DRIVER,\n\
                         DXE_SMM_DRIVER, SECURITY_CORE, COMBINED_PEIM_DRIVER,\n\
+                        MM_STANDALONE, MM_CORE_STANDALONE,\n\
                         PIC_PEIM, RELOCATABLE_PEIM, BS_DRIVER, RT_DRIVER,\n\
                         APPLICATION, SAL_RT_DRIVER to support all module types\n\
                         It can only be used together with --keepexceptiontable,\n\
@@ -240,7 +236,7 @@ Returns:
                         If it is combined with other action options, the later\n\
                         input action option will override the previous one.\n");
   fprintf (stdout, "  -a NUM, --align NUM   NUM is one HEX or DEC format alignment value.\n\
-                        This option is only used together with -j option.\n");  
+                        This option is only used together with -j option.\n");
   fprintf (stdout, "  -p NUM, --pad NUM     NUM is one HEX or DEC format padding value.\n\
                         This option is only used together with -j option.\n");
   fprintf (stdout, "  --keepexceptiontable  Don't clear exception table.\n\
@@ -259,13 +255,13 @@ Returns:
                         Guid is used to specify hii package list guid.\n\
                         Its format is xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n\
                         If not specified, the first Form FormSet guid is used.\n");
-  fprintf (stdout, "  --hiipackage          Combine all input binary hii pacakges into \n\
+  fprintf (stdout, "  --hiipackage          Combine all input binary hii packages into \n\
                         a single package list as the text resource data(RC).\n\
                         It can't be combined with other action options\n\
                         except for -o option. It is a action option.\n\
                         If it is combined with other action options, the later\n\
                         input action option will override the previous one.\n");
-  fprintf (stdout, "  --hiibinpackage       Combine all input binary hii pacakges into \n\
+  fprintf (stdout, "  --hiibinpackage       Combine all input binary hii packages into \n\
                         a single package list as the binary resource section.\n\
                         It can't be combined with other action options\n\
                         except for -o option. It is a action option.\n\
@@ -488,7 +484,7 @@ SetHiiResourceHeader (
         }
 
         //
-        // Now it ought to be resource Data and update its OffsetToData value 
+        // Now it ought to be resource Data and update its OffsetToData value
         //
         if (!ResourceDirectoryEntry->u2.s.DataIsDirectory) {
           ResourceDataEntry = (EFI_IMAGE_RESOURCE_DATA_ENTRY *) (HiiBinData + ResourceDirectoryEntry->u2.OffsetToData);
@@ -499,7 +495,7 @@ SetHiiResourceHeader (
     }
     ResourceDirectoryEntry++;
   }
-  
+
   return;
 }
 
@@ -528,7 +524,7 @@ GetPeCoffHeader (
       return NULL;
     }
   }
-  
+
   return PeHdr;
 }
 
@@ -553,11 +549,11 @@ PeCoffConvertImageToXip (
   if (PeHdr == NULL) {
     return;
   }
-  
+
   if (PeHdr->Pe32.OptionalHeader.SectionAlignment != PeHdr->Pe32.OptionalHeader.FileAlignment) {
     //
     // The only reason to expand zero fill sections is to make them compatible with XIP images.
-    // If SectionAlignment is not equal to FileAlginment then it is not an XIP type image.
+    // If SectionAlignment is not equal to FileAlignment then it is not an XIP type image.
     //
     return;
   }
@@ -664,11 +660,13 @@ PeCoffConvertImageToXip (
   free (*FileBuffer);
   *FileLength = XipLength;
   *FileBuffer = XipFile;
+
+  mIsConvertXip = TRUE;
 }
 
 UINT8 *
 CreateHiiResouceSectionHeader (
-  UINT32 *pSectionHeaderSize, 
+  UINT32 *pSectionHeaderSize,
   UINT32 HiiDataSize
   )
 /*++
@@ -701,8 +699,8 @@ Returns:
   // Calculate the total size for the resource header (include Type, Name and Language)
   // then allocate memory for the resource header.
   //
-  HiiSectionHeaderSize = 3 * (sizeof (EFI_IMAGE_RESOURCE_DIRECTORY) + sizeof (EFI_IMAGE_RESOURCE_DIRECTORY_ENTRY)) 
-                          + 3 * (sizeof (UINT16) + 3 * sizeof (CHAR16)) 
+  HiiSectionHeaderSize = 3 * (sizeof (EFI_IMAGE_RESOURCE_DIRECTORY) + sizeof (EFI_IMAGE_RESOURCE_DIRECTORY_ENTRY))
+                          + 3 * (sizeof (UINT16) + 3 * sizeof (CHAR16))
                           + sizeof (EFI_IMAGE_RESOURCE_DATA_ENTRY);
   HiiSectionHeader = malloc (HiiSectionHeaderSize);
   if (HiiSectionHeader == NULL) {
@@ -713,7 +711,7 @@ Returns:
 
   HiiSectionOffset = 0;
   //
-  // Create Type entry 
+  // Create Type entry
   //
   ResourceDirectory = (EFI_IMAGE_RESOURCE_DIRECTORY *) (HiiSectionHeader + HiiSectionOffset);
   HiiSectionOffset += sizeof (EFI_IMAGE_RESOURCE_DIRECTORY);
@@ -873,7 +871,7 @@ Returns:
 
   if (ImageContext.RelocationsStripped) {
     Error (NULL, 0, 3000, "Invalid", "The input PeImage %s has no relocation to be fixed up", FileName);
-    return Status;    
+    return Status;
   }
 
   //
@@ -886,8 +884,8 @@ Returns:
   //
   SectionHeader = (EFI_IMAGE_SECTION_HEADER *) (
     (UINTN) ImgHdr +
-    sizeof (UINT32) + 
-    sizeof (EFI_IMAGE_FILE_HEADER) +  
+    sizeof (UINT32) +
+    sizeof (EFI_IMAGE_FILE_HEADER) +
     ImgHdr->Pe32.FileHeader.SizeOfOptionalHeader
     );
 
@@ -953,7 +951,7 @@ Returns:
 
   if (ImageContext.RelocationsStripped) {
     Error (NULL, 0, 3000, "Invalid", "The input PeImage %s has no relocation to be fixed up", FileName);
-    return Status;    
+    return Status;
   }
 
   //
@@ -992,15 +990,15 @@ Returns:
   //
   SectionHeader = (EFI_IMAGE_SECTION_HEADER *) (
     (UINTN) ImgHdr +
-    sizeof (UINT32) + 
-    sizeof (EFI_IMAGE_FILE_HEADER) +  
+    sizeof (UINT32) +
+    sizeof (EFI_IMAGE_FILE_HEADER) +
     ImgHdr->Pe32.FileHeader.SizeOfOptionalHeader
     );
 
   for (Index = 0; Index < ImgHdr->Pe32.FileHeader.NumberOfSections; Index ++, SectionHeader ++) {
     CopyMem (
-      FileBuffer + SectionHeader->PointerToRawData, 
-      (VOID*) (UINTN) (ImageContext.ImageAddress + SectionHeader->VirtualAddress), 
+      FileBuffer + SectionHeader->PointerToRawData,
+      (VOID*) (UINTN) (ImageContext.ImageAddress + SectionHeader->VirtualAddress),
       SectionHeader->SizeOfRawData
       );
   }
@@ -1010,7 +1008,7 @@ Returns:
   //
   // Update Image Base Address
   //
-  if ((ImgHdr->Pe32.OptionalHeader.Magic == EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC) && (ImgHdr->Pe32.FileHeader.Machine != IMAGE_FILE_MACHINE_IA64)) {
+  if (ImgHdr->Pe32.OptionalHeader.Magic == EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
     ImgHdr->Pe32.OptionalHeader.ImageBase = (UINT32) NewPe32BaseAddress;
   } else if (ImgHdr->Pe32Plus.OptionalHeader.Magic == EFI_IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
     ImgHdr->Pe32Plus.OptionalHeader.ImageBase = NewPe32BaseAddress;
@@ -1386,7 +1384,7 @@ Returns:
         goto Finish;
       }
       if (LogLevel > 9) {
-        Error (NULL, 0, 1003, "Invalid option value", "Debug Level range is 0-9, currnt input level is %d", (int) LogLevel);
+        Error (NULL, 0, 1003, "Invalid option value", "Debug Level range is 0-9, current input level is %d", (int) LogLevel);
         goto Finish;
       }
       SetPrintLevel (LogLevel);
@@ -1532,16 +1530,16 @@ Returns:
     VerboseMsg ("Dump the TE header information of the input TE image.");
     break;
   case FW_MCI_IMAGE:
-    VerboseMsg ("Conver input MicroCode.txt file to MicroCode.bin file.");
+    VerboseMsg ("Convert input MicroCode.txt file to MicroCode.bin file.");
     break;
   case FW_MERGE_IMAGE:
     VerboseMsg ("Combine the input multi microcode bin files to one bin file.");
     break;
   case FW_HII_PACKAGE_LIST_RCIMAGE:
-    VerboseMsg ("Combine the input multi hii bin packages to one text pacakge list RC file.");
+    VerboseMsg ("Combine the input multi hii bin packages to one text package list RC file.");
     break;
   case FW_HII_PACKAGE_LIST_BINIMAGE:
-    VerboseMsg ("Combine the input multi hii bin packages to one binary pacakge list file.");
+    VerboseMsg ("Combine the input multi hii bin packages to one binary package list file.");
     break;
   case FW_REBASE_IMAGE:
     VerboseMsg ("Rebase the input image to new base address.");
@@ -1629,7 +1627,7 @@ Returns:
       goto Finish;
     }
     //
-    // Get hii package list lenght
+    // Get hii package list length
     //
     HiiPackageListHeader.PackageLength = sizeof (EFI_HII_PACKAGE_LIST_HEADER);
     for (Index = 0; Index < InputFileNum; Index ++) {
@@ -1664,7 +1662,7 @@ Returns:
       goto Finish;
     }
     if (memcmp (&HiiPackageListGuid, &mZeroGuid, sizeof (EFI_GUID)) == 0) {
-      Error (NULL, 0, 3000, "Invalid", "HII pacakge list guid is not specified!");
+      Error (NULL, 0, 3000, "Invalid", "HII package list guid is not specified!");
       goto Finish;
     }
     memcpy (&HiiPackageListHeader.PackageListGuid, &HiiPackageListGuid, sizeof (EFI_GUID));
@@ -2009,7 +2007,9 @@ Returns:
         stricmp (ModuleType, "DXE_DRIVER") == 0 ||
         stricmp (ModuleType, "DXE_SMM_DRIVER") == 0  ||
         stricmp (ModuleType, "UEFI_DRIVER") == 0 ||
-        stricmp (ModuleType, "SMM_CORE") == 0) {
+        stricmp (ModuleType, "SMM_CORE") == 0 ||
+        stricmp (ModuleType, "MM_STANDALONE") == 0 ||
+        stricmp (ModuleType, "MM_CORE_STANDALONE") == 0) {
           Type = EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER;
           VerboseMsg ("Efi Image subsystem type is efi boot service driver.");
 
@@ -2166,7 +2166,7 @@ Returns:
 
   if (PeHdr->Pe32.FileHeader.Machine == IMAGE_FILE_MACHINE_ARM) {
     // Some tools kick out IMAGE_FILE_MACHINE_ARM (0x1c0) vs IMAGE_FILE_MACHINE_ARMT (0x1c2)
-    // so patch back to the offical UEFI value.
+    // so patch back to the official UEFI value.
     PeHdr->Pe32.FileHeader.Machine = IMAGE_FILE_MACHINE_ARMT;
   }
 
@@ -2174,13 +2174,13 @@ Returns:
   // Set new base address into image
   //
   if (mOutImageType == FW_REBASE_IMAGE || mOutImageType == FW_SET_ADDRESS_IMAGE) {
-    if ((PeHdr->Pe32.OptionalHeader.Magic == EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC) && (PeHdr->Pe32.FileHeader.Machine != IMAGE_FILE_MACHINE_IA64)) {
+    if (PeHdr->Pe32.OptionalHeader.Magic == EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
       if (NewBaseAddress >= 0x100000000ULL) {
         Error (NULL, 0, 3000, "Invalid", "New base address is larger than 4G for 32bit PE image");
         goto Finish;
       }
     }
-    
+
     if (NegativeAddr) {
       //
       // Set Base Address to a negative value.
@@ -2366,7 +2366,7 @@ Returns:
             //
             memset (SectionHeader->Name, 0, sizeof (SectionHeader->Name));
             //
-            // Zero Execption Table
+            // Zero Exception Table
             //
             Optional32->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress = 0;
             Optional32->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size           = 0;
@@ -2445,7 +2445,7 @@ Returns:
     // Zero the .pdata section for X64 machine and don't check the Debug Directory is empty
     // For Itaninum and X64 Image, remove .pdata section.
     //
-    if ((!KeepExceptionTableFlag && PeHdr->Pe32.FileHeader.Machine == IMAGE_FILE_MACHINE_X64) || PeHdr->Pe32.FileHeader.Machine == IMAGE_FILE_MACHINE_IA64) {
+    if ((!KeepExceptionTableFlag && PeHdr->Pe32.FileHeader.Machine == IMAGE_FILE_MACHINE_X64)) {
       if (Optional64->NumberOfRvaAndSizes > EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION &&
         Optional64->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress != 0 &&
         Optional64->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size != 0) {
@@ -2473,7 +2473,7 @@ Returns:
                 memset (RuntimeFunction, 0, sizeof (RUNTIME_FUNCTION));
               }
               //
-              // Zero Execption Table
+              // Zero Exception Table
               //
               Optional64->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size = 0;
               Optional64->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress = 0;
@@ -2528,7 +2528,7 @@ Returns:
     (TEImageHeader.DataDirectory[EFI_TE_IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress == 0) && \
     (TEImageHeader.DataDirectory[EFI_TE_IMAGE_DIRECTORY_ENTRY_BASERELOC].Size == 0)) {
       //
-      // PeImage can be loaded into memory, but it has no relocation section. 
+      // PeImage can be loaded into memory, but it has no relocation section.
       // Fix TeImage Header to set VA of relocation data directory to not zero, the size is still zero.
       //
       if (Optional32 != NULL) {
@@ -2710,7 +2710,7 @@ Finish:
       }
     }
   }
-  
+
   if (InputFileBuffer != NULL) {
     free (InputFileBuffer);
   }
@@ -2729,7 +2729,7 @@ Finish:
     ReportFileName = (CHAR8 *) malloc (FileLen + 1);
     if (ReportFileName != NULL) {
       strcpy (ReportFileName, OutImageName);
-      strcpy (ReportFileName + (FileLen - 4), ".txt"); 
+      strcpy (ReportFileName + (FileLen - 4), ".txt");
       ReportFile = fopen (LongFilePath (ReportFileName), "w+");
       if (ReportFile != NULL) {
         fprintf (ReportFile, "MODULE_SIZE = %u\n", (unsigned) mImageSize);
@@ -2770,6 +2770,7 @@ Returns:
 {
   UINT32                           Index;
   UINT32                           DebugDirectoryEntryRva;
+  UINT32                           DebugDirectoryEntrySize;
   UINT32                           DebugDirectoryEntryFileOffset;
   UINT32                           ExportDirectoryEntryRva;
   UINT32                           ExportDirectoryEntryFileOffset;
@@ -2781,12 +2782,14 @@ Returns:
   EFI_IMAGE_OPTIONAL_HEADER64     *Optional64Hdr;
   EFI_IMAGE_SECTION_HEADER        *SectionHeader;
   EFI_IMAGE_DEBUG_DIRECTORY_ENTRY *DebugEntry;
-  UINT32                          *NewTimeStamp;  
+  EFI_IMAGE_DEBUG_CODEVIEW_RSDS_ENTRY *RsdsEntry;
+  UINT32                          *NewTimeStamp;
 
   //
   // Init variable.
   //
   DebugDirectoryEntryRva           = 0;
+  DebugDirectoryEntrySize          = 0;
   ExportDirectoryEntryRva          = 0;
   ResourceDirectoryEntryRva        = 0;
   DebugDirectoryEntryFileOffset    = 0;
@@ -2809,6 +2812,7 @@ Returns:
   // Resource Directory entry need to review.
   //
   Optional32Hdr = (EFI_IMAGE_OPTIONAL_HEADER32 *) ((UINT8*) FileHdr + sizeof (EFI_IMAGE_FILE_HEADER));
+  Optional64Hdr = (EFI_IMAGE_OPTIONAL_HEADER64 *) ((UINT8*) FileHdr + sizeof (EFI_IMAGE_FILE_HEADER));
   if (Optional32Hdr->Magic == EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
     SectionHeader = (EFI_IMAGE_SECTION_HEADER *) ((UINT8 *) Optional32Hdr +  FileHdr->SizeOfOptionalHeader);
     if (Optional32Hdr->NumberOfRvaAndSizes > EFI_IMAGE_DIRECTORY_ENTRY_EXPORT && \
@@ -2822,13 +2826,13 @@ Returns:
     if (Optional32Hdr->NumberOfRvaAndSizes > EFI_IMAGE_DIRECTORY_ENTRY_DEBUG && \
         Optional32Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size != 0) {
       DebugDirectoryEntryRva = Optional32Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress;
+      DebugDirectoryEntrySize = Optional32Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size;
       if (ZeroDebugFlag) {
         Optional32Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size = 0;
         Optional32Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress = 0;
       }
     }
   } else {
-    Optional64Hdr = (EFI_IMAGE_OPTIONAL_HEADER64 *) ((UINT8*) FileHdr + sizeof (EFI_IMAGE_FILE_HEADER));
     SectionHeader = (EFI_IMAGE_SECTION_HEADER *) ((UINT8 *) Optional64Hdr +  FileHdr->SizeOfOptionalHeader);
     if (Optional64Hdr->NumberOfRvaAndSizes > EFI_IMAGE_DIRECTORY_ENTRY_EXPORT && \
         Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_EXPORT].Size != 0) {
@@ -2841,6 +2845,7 @@ Returns:
     if (Optional64Hdr->NumberOfRvaAndSizes > EFI_IMAGE_DIRECTORY_ENTRY_DEBUG && \
         Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size != 0) {
       DebugDirectoryEntryRva = Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress;
+      DebugDirectoryEntrySize = Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size;
       if (ZeroDebugFlag) {
         Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size = 0;
         Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress = 0;
@@ -2886,11 +2891,30 @@ Returns:
 
   if (DebugDirectoryEntryFileOffset != 0) {
     DebugEntry = (EFI_IMAGE_DEBUG_DIRECTORY_ENTRY *) (FileBuffer + DebugDirectoryEntryFileOffset);
-    DebugEntry->TimeDateStamp = 0;
-    mImageTimeStamp = 0;
-    if (ZeroDebugFlag) {
-      memset (FileBuffer + DebugEntry->FileOffset, 0, DebugEntry->SizeOfData);
-      memset (DebugEntry, 0, sizeof (EFI_IMAGE_DEBUG_DIRECTORY_ENTRY));
+    Index = 0;
+    for (Index=0; Index < DebugDirectoryEntrySize / sizeof (EFI_IMAGE_DEBUG_DIRECTORY_ENTRY); Index ++, DebugEntry ++) {
+      DebugEntry->TimeDateStamp = 0;
+      if (mIsConvertXip) {
+        DebugEntry->FileOffset = DebugEntry->RVA;
+      }
+      if (ZeroDebugFlag || DebugEntry->Type != EFI_IMAGE_DEBUG_TYPE_CODEVIEW) {
+        memset (FileBuffer + DebugEntry->FileOffset, 0, DebugEntry->SizeOfData);
+        memset (DebugEntry, 0, sizeof (EFI_IMAGE_DEBUG_DIRECTORY_ENTRY));
+      }
+      if (DebugEntry->Type == EFI_IMAGE_DEBUG_TYPE_CODEVIEW) {
+        RsdsEntry = (EFI_IMAGE_DEBUG_CODEVIEW_RSDS_ENTRY *) (FileBuffer + DebugEntry->FileOffset);
+        if (RsdsEntry->Signature == CODEVIEW_SIGNATURE_MTOC) {
+          // MTOC sets DebugDirectoryEntrySize to size of the .debug section, so fix it.
+          if (!ZeroDebugFlag) {
+            if (Optional32Hdr->Magic == EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+              Optional32Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size = sizeof (EFI_IMAGE_DEBUG_DIRECTORY_ENTRY);
+            } else {
+              Optional64Hdr->DataDirectory[EFI_IMAGE_DIRECTORY_ENTRY_DEBUG].Size = sizeof (EFI_IMAGE_DEBUG_DIRECTORY_ENTRY);
+            }
+          }
+          break;
+        }
+      }
     }
   }
 
@@ -2938,7 +2962,7 @@ Returns:
   EFI_IMAGE_OPTIONAL_HEADER64     *Optional64Hdr;
   EFI_IMAGE_SECTION_HEADER        *SectionHeader;
   UINT32                          *NewTimeStamp;
-  
+
   //
   // Init variable.
   //

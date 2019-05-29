@@ -2,13 +2,7 @@
   Page table management header file.
 
   Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -49,6 +43,19 @@ typedef struct {
   UINT16                                 MachineType;
   PAGE_TABLE_LIB_PAGING_CONTEXT_DATA     ContextData;
 } PAGE_TABLE_LIB_PAGING_CONTEXT;
+
+#define PAGE_TABLE_POOL_ALIGNMENT   BASE_2MB
+#define PAGE_TABLE_POOL_UNIT_SIZE   SIZE_2MB
+#define PAGE_TABLE_POOL_UNIT_PAGES  EFI_SIZE_TO_PAGES (PAGE_TABLE_POOL_UNIT_SIZE)
+#define PAGE_TABLE_POOL_ALIGN_MASK  \
+  (~(EFI_PHYSICAL_ADDRESS)(PAGE_TABLE_POOL_ALIGNMENT - 1))
+
+typedef struct {
+  VOID            *NextPool;
+  UINTN           Offset;
+  UINTN           FreePages;
+} PAGE_TABLE_POOL;
+
 
 /**
   Allocates one or more 4KB pages for page table.
@@ -108,6 +115,27 @@ AssignMemoryPageAttributes (
 VOID
 InitializePageTableLib (
   VOID
+  );
+
+/**
+  This API provides a way to allocate memory for page table.
+
+  This API can be called more once to allocate memory for page tables.
+
+  Allocates the number of 4KB pages of type EfiRuntimeServicesData and returns a pointer to the
+  allocated buffer.  The buffer returned is aligned on a 4KB boundary.  If Pages is 0, then NULL
+  is returned.  If there is not enough memory remaining to satisfy the request, then NULL is
+  returned.
+
+  @param  Pages                 The number of 4 KB pages to allocate.
+
+  @return A pointer to the allocated buffer or NULL if allocation fails.
+
+**/
+VOID *
+EFIAPI
+AllocatePageTableMemory (
+  IN UINTN           Pages
   );
 
 #endif

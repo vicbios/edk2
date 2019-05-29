@@ -1,14 +1,8 @@
 /** @file
   Register CPU Features Library to register and manage CPU features.
 
-  Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2017 - 2019, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -35,7 +29,7 @@
 #define CPU_FEATURE_FASTSTRINGS                     6
 #define CPU_FEATURE_VMX                             7
 #define CPU_FEATURE_SMX                             8
-#define CPU_FEATURE_SENTER                          9
+#define CPU_FEATURE_LMCE                            9
 #define CPU_FEATURE_LOCK_FEATURE_CONTROL_REGISTER   10
 #define CPU_FEATURE_LIMIT_CPUID_MAX_VAL             11
 #define CPU_FEATURE_MCE                             12
@@ -45,8 +39,8 @@
 #define CPU_FEATURE_C1E                             16
 #define CPU_FEATURE_C1_AUTO_DEMOTION                17
 #define CPU_FEATURE_C3_AUTO_DEMOTION                18
-#define CPU_FEATURE_C1_AUTO_UNDEMOTION              19
-#define CPU_FEATURE_C3_AUTO_UNDEMOTION              20
+#define CPU_FEATURE_C1_UNDEMOTION                   19
+#define CPU_FEATURE_C3_UNDEMOTION                   20
 #define CPU_FEATURE_C_STATE                         21
 #define CPU_FEATURE_TM                              22
 #define CPU_FEATURE_TM2                             23
@@ -70,11 +64,26 @@
 #define CPU_FEATURE_THREE_STRICK_COUNTER            (32+8)
 #define CPU_FEATURE_APIC_TPR_UPDATE_MESSAGE         (32+9)
 #define CPU_FEATURE_ENERGY_PERFORMANCE_BIAS         (32+10)
+#define CPU_FEATURE_PPIN                            (32+11)
+#define CPU_FEATURE_PROC_TRACE                      (32+12)
 
-#define CPU_FEATURE_BEFORE_ALL                      BIT27
-#define CPU_FEATURE_AFTER_ALL                       BIT28
-#define CPU_FEATURE_BEFORE                          BIT29
-#define CPU_FEATURE_AFTER                           BIT30
+#define CPU_FEATURE_BEFORE_ALL                      BIT23
+#define CPU_FEATURE_AFTER_ALL                       BIT24
+//
+// CPU_FEATURE_BEFORE and CPU_FEATURE_AFTER only mean Thread scope
+// before and Thread scope after.
+// It will be replace with CPU_FEATURE_THREAD_BEFORE and
+// CPU_FEATURE_THREAD_AFTER, and should not be used anymore.
+//
+#define CPU_FEATURE_BEFORE                          BIT25
+#define CPU_FEATURE_AFTER                           BIT26
+
+#define CPU_FEATURE_THREAD_BEFORE                   CPU_FEATURE_BEFORE
+#define CPU_FEATURE_THREAD_AFTER                    CPU_FEATURE_AFTER
+#define CPU_FEATURE_CORE_BEFORE                     BIT27
+#define CPU_FEATURE_CORE_AFTER                      BIT28
+#define CPU_FEATURE_PACKAGE_BEFORE                  BIT29
+#define CPU_FEATURE_PACKAGE_AFTER                   BIT30
 #define CPU_FEATURE_END                             MAX_UINT32
 /// @}
 
@@ -152,40 +161,6 @@ IsCpuFeatureInSetting (
   );
 
 /**
-  Determines if a CPU feature is set in PcdCpuFeaturesCapability bit mask.
-
-  @param[in]  Feature  The bit number of the CPU feature to check in the PCD
-                       PcdCpuFeaturesCapability.
-
-  @retval  TRUE   The CPU feature is set in PcdCpuFeaturesCapability.
-  @retval  FALSE  The CPU feature is not set in PcdCpuFeaturesCapability.
-
-  @note This service could be called by BSP only.
-**/
-BOOLEAN
-EFIAPI
-IsCpuFeatureCapability (
-  IN UINT32              Feature
-  );
-
-/**
-  Determines if a CPU feature is set in PcdCpuFeaturesUserConfiguration bit mask.
-
-  @param[in]  Feature  The bit number of the CPU feature to check in the PCD
-                       PcdCpuFeaturesUserConfiguration.
-
-  @retval  TRUE   The CPU feature is set in PcdCpuFeaturesUserConfiguration.
-  @retval  FALSE  The CPU feature is not set in PcdCpuFeaturesUserConfiguration.
-
-  @note This service could be called by BSP only.
-**/
-BOOLEAN
-EFIAPI
-IsCpuFeatureUserConfiguration (
-  IN UINT32              Feature
-  );
-
-/**
   Prepares for the data used by CPU feature detection and initialization.
 
   @param[in]  NumberOfProcessors  The number of CPUs in the platform.
@@ -257,35 +232,37 @@ RETURN_STATUS
 /**
   Registers a CPU Feature.
 
-  @param  GetConfigDataFunc  CPU feature get configuration data function.  This
-                             is an optional parameter that may be NULL.  If NULL,
-                             then the most recently registered function for the
-                             CPU feature is used.  If no functions are registered
-                             for a CPU feature, then the CPU configuration data
-                             for the registered feature is NULL.
-  @param  SupportFunc        CPU feature support function.  This is an optional
-                             parameter that may be NULL.  If NULL, then the most
-                             recently registered function for the CPU feature is
-                             used. If no functions are registered for a CPU
-                             feature, then the CPU feature is assumed to be
-                             supported by all CPUs.
-  @param  InitializeFunc     CPU feature initialize function.  This is an optional
-                             parameter that may be NULL.  If NULL, then the most
-                             recently registered function for the CPU feature is
-                             used. If no functions are registered for a CPU
-                             feature, then the CPU feature initialization is
-                             skipped.
-  @param  ...                Variable argument list of UINT32 CPU feature value.
-                             Values with no modifiers are the features provided
-                             by the registered functions.
-                             Values with CPU_FEATURE_BEFORE modifier are features
-                             that must be initialized after the features provided
-                             by the registered functions are used.
-                             Values with CPU_FEATURE_AFTER modifier are features
-                             that must be initialized before the features provided
-                             by the registered functions are used.
-                             The last argument in this variable argument list must
-                             always be CPU_FEATURE_END.
+  @param[in]  FeatureName        A Null-terminated Ascii string indicates CPU feature
+                                 name.
+  @param[in]  GetConfigDataFunc  CPU feature get configuration data function.  This
+                                 is an optional parameter that may be NULL.  If NULL,
+                                 then the most recently registered function for the
+                                 CPU feature is used.  If no functions are registered
+                                 for a CPU feature, then the CPU configuration data
+                                 for the registered feature is NULL.
+  @param[in]  SupportFunc        CPU feature support function.  This is an optional
+                                 parameter that may be NULL.  If NULL, then the most
+                                 recently registered function for the CPU feature is
+                                 used. If no functions are registered for a CPU
+                                 feature, then the CPU feature is assumed to be
+                                 supported by all CPUs.
+  @param[in]  InitializeFunc     CPU feature initialize function.  This is an optional
+                                 parameter that may be NULL.  If NULL, then the most
+                                 recently registered function for the CPU feature is
+                                 used. If no functions are registered for a CPU
+                                 feature, then the CPU feature initialization is
+                                 skipped.
+  @param[in]  ...                Variable argument list of UINT32 CPU feature value.
+                                 Values with no modifiers are the features provided
+                                 by the registered functions.
+                                 Values with CPU_FEATURE_BEFORE modifier are features
+                                 that must be initialized after the features provided
+                                 by the registered functions are used.
+                                 Values with CPU_FEATURE_AFTER modifier are features
+                                 that must be initialized before the features provided
+                                 by the registered functions are used.
+                                 The last argument in this variable argument list must
+                                 always be CPU_FEATURE_END.
 
   @retval  RETURN_SUCCESS           The CPU feature was successfully registered.
   @retval  RETURN_OUT_OF_RESOURCES  There are not enough resources to register
@@ -366,7 +343,7 @@ EFIAPI
 CpuRegisterTableWrite (
   IN UINTN               ProcessorNumber,
   IN REGISTER_TYPE       RegisterType,
-  IN UINT32              Index,
+  IN UINT64              Index,
   IN UINT64              ValueMask,
   IN UINT64              Value
   );
@@ -390,7 +367,7 @@ EFIAPI
 PreSmmCpuRegisterTableWrite (
   IN UINTN               ProcessorNumber,
   IN REGISTER_TYPE       RegisterType,
-  IN UINT32              Index,
+  IN UINT64              Index,
   IN UINT64              ValueMask,
   IN UINT64              Value
   );

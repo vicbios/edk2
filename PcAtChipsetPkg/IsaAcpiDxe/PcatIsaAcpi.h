@@ -1,14 +1,8 @@
 /** @file
   EFI PCAT ISA ACPI Driver for a Generic PC Platform
 
-Copyright (c) 2006 - 2011, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials                          
-are licensed and made available under the terms and conditions of the BSD License         
-which accompanies this distribution.  The full text of the license may be found at        
-http://opensource.org/licenses/bsd-license.php                                            
-                                                                                          
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,                     
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.             
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -40,9 +34,10 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 
 typedef struct {
   UINTN                  Signature;
-  EFI_HANDLE             Handle;    
+  EFI_HANDLE             Handle;
   EFI_ISA_ACPI_PROTOCOL  IsaAcpi;
   EFI_PCI_IO_PROTOCOL    *PciIo;
+  UINT64                 OriginalAttributes;
 } PCAT_ISA_ACPI_DEV;
 
 #define PCAT_ISA_ACPI_DEV_FROM_THIS(a) BASE_CR(a, PCAT_ISA_ACPI_DEV, IsaAcpi)
@@ -63,7 +58,7 @@ extern EFI_COMPONENT_NAME_PROTOCOL  gPcatIsaAcpiComponentName;
 /**
   ControllerDriver Protocol Method
 
-  @param This                 Driver Binding protocol instance pointer.   
+  @param This                 Driver Binding protocol instance pointer.
   @param Controller           Handle of device to test.
   @param RemainingDevicePath  Optional parameter use to pick a specific child
                               device to start.
@@ -130,7 +125,7 @@ PcatIsaAcpiDriverBindingStop (
 
 
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
 
   @retval EFI_NOT_FOUND Can not found the next Isa device.
   @retval EFI_SUCCESS    Success retrieve the next Isa device for enumration.
@@ -148,7 +143,7 @@ IsaDeviceEnumerate (
 
 
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
   @param OnOff           TRUE for setting isa device power on,
                          FALSE for setting isa device power off
 
@@ -161,12 +156,12 @@ IsaDeviceSetPower (
   IN EFI_ISA_ACPI_DEVICE_ID  *Device,
   IN BOOLEAN                 OnOff
   );
-  
+
 /**
   Get current resource for the specific ISA device.
 
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
   @param ResourceList    On return, point to resources instances for given isa device
 
   @retval EFI_NOT_FOUND Can not found the resource instance for given isa device
@@ -179,12 +174,12 @@ IsaGetCurrentResource (
   IN  EFI_ISA_ACPI_DEVICE_ID      *Device,
   OUT EFI_ISA_ACPI_RESOURCE_LIST  **ResourceList
   );
-  
+
 /**
   Get possible resource for the specific ISA device.
-  
+
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
   @param ResourceList    On return, point to resources instances for given isa device
 
   @retval EFI_SUCCESS   Success to get resource instance for given isa device.
@@ -193,15 +188,15 @@ EFI_STATUS
 EFIAPI
 IsaGetPossibleResource (
   IN  EFI_ISA_ACPI_PROTOCOL       *This,
-  IN  EFI_ISA_ACPI_DEVICE_ID      *Device,  
+  IN  EFI_ISA_ACPI_DEVICE_ID      *Device,
   OUT EFI_ISA_ACPI_RESOURCE_LIST  **ResourceList
   );
-  
+
 /**
   Set resource for the specific ISA device.
 
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
   @param ResourceList    Point to resources instances for given isa device
 
   @return EFI_SUCCESS  Success to set resource.
@@ -214,12 +209,12 @@ IsaSetResource (
   IN EFI_ISA_ACPI_DEVICE_ID      *Device,
   IN EFI_ISA_ACPI_RESOURCE_LIST  *ResourceList
   );
-  
+
 /**
   Enable/Disable the specific ISA device.
 
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
   @param Enable          Enable/Disable
 
   @return EFI_SUCCESS  Success to enable/disable.
@@ -237,7 +232,7 @@ IsaEnableDevice (
   Initialize the specific ISA device.
 
   @param This            Point to instance of EFI_ISA_ACPI_PROTOCOL
-  @param Device          Point to device ID instance 
+  @param Device          Point to device ID instance
 
   @return EFI_SUCCESS  Success to initialize.
 
@@ -248,7 +243,7 @@ IsaInitDevice (
   IN EFI_ISA_ACPI_PROTOCOL   *This,
   IN EFI_ISA_ACPI_DEVICE_ID  *Device
   );
-  
+
 /**
   Initialize the ISA interface.
 
@@ -261,7 +256,7 @@ EFI_STATUS
 EFIAPI
 IsaInterfaceInit (
   IN EFI_ISA_ACPI_PROTOCOL  *This
-  );  
+  );
 
 /**
   Initialize the ISA device list.

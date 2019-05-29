@@ -1,16 +1,10 @@
 /** @file
 Agent Module to load other modules to deploy SMM Entry Vector for X86 CPU.
 
-Copyright (c) 2009 - 2016, Intel Corporation. All rights reserved.<BR>
+Copyright (c) 2009 - 2019, Intel Corporation. All rights reserved.<BR>
 Copyright (c) 2017, AMD Incorporated. All rights reserved.<BR>
 
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -25,8 +19,10 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 #include <Protocol/SmmAccess2.h>
 #include <Protocol/SmmReadyToLock.h>
 #include <Protocol/SmmCpuService.h>
+#include <Protocol/SmmMemoryAttribute.h>
 
 #include <Guid/AcpiS3Context.h>
+#include <Guid/MemoryAttributesTable.h>
 #include <Guid/PiSmmMemoryAttributesTable.h>
 
 #include <Library/BaseLib.h>
@@ -36,7 +32,6 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 #include <Library/DebugLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/PcdLib.h>
-#include <Library/CacheMaintenanceLib.h>
 #include <Library/MtrrLib.h>
 #include <Library/SmmCpuPlatformHookLib.h>
 #include <Library/SmmServicesTableLib.h>
@@ -44,6 +39,7 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/DebugAgentLib.h>
+#include <Library/UefiLib.h>
 #include <Library/HobLib.h>
 #include <Library/LocalApicLib.h>
 #include <Library/UefiCpuLib.h>
@@ -51,6 +47,7 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 #include <Library/ReportStatusCodeLib.h>
 #include <Library/SmmCpuFeaturesLib.h>
 #include <Library/PeCoffGetEntryPointLib.h>
+#include <Library/RegisterCpuFeaturesLib.h>
 
 #include <AcpiCpuData.h>
 #include <CpuHotPlugData.h>
@@ -60,6 +57,51 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 
 #include "CpuService.h"
 #include "SmmProfile.h"
+
+//
+// CET definition
+//
+#define CPUID_CET_SS   BIT7
+#define CPUID_CET_IBT  BIT20
+
+#define CR4_CET_ENABLE  BIT23
+
+#define MSR_IA32_S_CET                     0x6A2
+#define MSR_IA32_PL0_SSP                   0x6A4
+#define MSR_IA32_INTERRUPT_SSP_TABLE_ADDR  0x6A8
+
+typedef union {
+  struct {
+    // enable shadow stacks
+    UINT32  SH_STK_ENP:1;
+    // enable the WRSS{D,Q}W instructions.
+    UINT32  WR_SHSTK_EN:1;
+    // enable tracking of indirect call/jmp targets to be ENDBRANCH instruction.
+    UINT32  ENDBR_EN:1;
+    // enable legacy compatibility treatment for indirect call/jmp tracking.
+    UINT32  LEG_IW_EN:1;
+    // enable use of no-track prefix on indirect call/jmp.
+    UINT32  NO_TRACK_EN:1;
+    // disable suppression of CET indirect branch tracking on legacy compatibility.
+    UINT32  SUPPRESS_DIS:1;
+    UINT32  RSVD:4;
+    // indirect branch tracking is suppressed.
+    // This bit can be written to 1 only if TRACKER is written as IDLE.
+    UINT32  SUPPRESS:1;
+    // Value of the endbranch state machine
+    // Values: IDLE (0), WAIT_FOR_ENDBRANCH(1).
+    UINT32  TRACKER:1;
+    // linear address of a bitmap in memory indicating valid
+    // pages as target of CALL/JMP_indirect that do not land on ENDBRANCH when CET is enabled
+    // and not suppressed. Valid when ENDBR_EN is 1. Must be machine canonical when written on
+    // parts that support 64 bit mode. On parts that do not support 64 bit mode, the bits 63:32 are
+    // reserved and must be 0. This value is extended by 12 bits at the low end to form the base address
+    // (this automatically aligns the address on a 4-Kbyte boundary).
+    UINT32  EB_LEG_BITMAP_BASE_low:12;
+    UINT32  EB_LEG_BITMAP_BASE_high:32;
+  } Bits;
+  UINT64   Uint64;
+} MSR_IA32_CET;
 
 //
 // MSRs required for configuration of SMM Code Access Check
@@ -105,6 +147,8 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 #define PAGING_2M_ADDRESS_MASK_64 0x000FFFFFFFE00000ull
 #define PAGING_1G_ADDRESS_MASK_64 0x000FFFFFC0000000ull
 
+#define SMRR_MAX_ADDRESS       BASE_4GB
+
 typedef enum {
   PageNone,
   Page4K,
@@ -122,9 +166,11 @@ typedef struct {
 // Size of Task-State Segment defined in IA32 Manual
 //
 #define TSS_SIZE              104
+#define EXCEPTION_TSS_SIZE    (TSS_SIZE + 4) // Add 4 bytes SSP
 #define TSS_X64_IST1_OFFSET   36
 #define TSS_IA32_CR3_OFFSET   28
 #define TSS_IA32_ESP_OFFSET   56
+#define TSS_IA32_SSP_OFFSET   104
 
 #define CR0_WP                BIT16
 
@@ -292,23 +338,16 @@ WriteSaveStateRegister (
   IN CONST VOID                   *Buffer
   );
 
-//
-//
-//
-typedef struct {
-  UINT32                            Offset;
-  UINT16                            Segment;
-  UINT16                            Reserved;
-} IA32_FAR_ADDRESS;
-
-extern IA32_FAR_ADDRESS             gSmmJmpAddr;
-
 extern CONST UINT8                  gcSmmInitTemplate[];
 extern CONST UINT16                 gcSmmInitSize;
-extern UINT32                       gSmmCr0;
-extern UINT32                       gSmmCr3;
-extern UINT32                       gSmmCr4;
-extern UINTN                        gSmmInitStack;
+X86_ASSEMBLY_PATCH_LABEL            gPatchSmmCr0;
+extern UINT32                       mSmmCr0;
+X86_ASSEMBLY_PATCH_LABEL            gPatchSmmCr3;
+extern UINT32                       mSmmCr4;
+X86_ASSEMBLY_PATCH_LABEL            gPatchSmmCr4;
+X86_ASSEMBLY_PATCH_LABEL            gPatchSmmInitStack;
+X86_ASSEMBLY_PATCH_LABEL            mPatchCetSupported;
+extern BOOLEAN                      mCetSupported;
 
 /**
   Semaphore operation for all processor relocate SMMBase.
@@ -351,13 +390,6 @@ typedef struct {
   volatile BOOLEAN              *CandidateBsp;
 } SMM_DISPATCHER_MP_SYNC_DATA;
 
-#define MSR_SPIN_LOCK_INIT_NUM 15
-
-typedef struct {
-  SPIN_LOCK    *SpinLock;
-  UINT32       MsrIndex;
-} MP_MSR_LOCK;
-
 #define SMM_PSD_OFFSET              0xfb00
 
 ///
@@ -369,7 +401,6 @@ typedef struct {
   volatile BOOLEAN     *AllCpusInSync;
   SPIN_LOCK            *PFLock;
   SPIN_LOCK            *CodeAccessCheckLock;
-  SPIN_LOCK            *MemoryMappedLock;
 } SMM_CPU_SEMAPHORE_GLOBAL;
 
 ///
@@ -382,20 +413,11 @@ typedef struct {
 } SMM_CPU_SEMAPHORE_CPU;
 
 ///
-/// All MSRs semaphores' pointer and counter
-///
-typedef struct {
-  SPIN_LOCK            *Msr;
-  UINTN                AvailableCounter;
-} SMM_CPU_SEMAPHORE_MSR;
-
-///
 /// All semaphores' information
 ///
 typedef struct {
   SMM_CPU_SEMAPHORE_GLOBAL          SemaphoreGlobal;
   SMM_CPU_SEMAPHORE_CPU             SemaphoreCpu;
-  SMM_CPU_SEMAPHORE_MSR             SemaphoreMsr;
 } SMM_CPU_SEMAPHORES;
 
 extern IA32_DESCRIPTOR                     gcSmiGdtr;
@@ -414,7 +436,9 @@ extern SMM_CPU_SEMAPHORES                  mSmmCpuSemaphores;
 extern UINTN                               mSemaphoreSize;
 extern SPIN_LOCK                           *mPFLock;
 extern SPIN_LOCK                           *mConfigSmmCodeAccessCheckLock;
-extern SPIN_LOCK                           *mMemoryMappedLock;
+extern EFI_SMRAM_DESCRIPTOR                *mSmmCpuSmramRanges;
+extern UINTN                               mSmmCpuSmramRangeCount;
+extern UINT8                               mPhysicalAddressBits;
 
 //
 // Copy of the PcdPteMemoryEncryptionAddressOrMask
@@ -437,14 +461,16 @@ Gen4GPageTable (
 /**
   Initialize global data for MP synchronization.
 
-  @param Stacks       Base address of SMI stack buffer for all processors.
-  @param StackSize    Stack size for each processor in SMM.
+  @param Stacks             Base address of SMI stack buffer for all processors.
+  @param StackSize          Stack size for each processor in SMM.
+  @param ShadowStackSize    Shadow Stack size for each processor in SMM.
 
 **/
 UINT32
 InitializeMpServiceData (
   IN VOID        *Stacks,
-  IN UINTN       StackSize
+  IN UINTN       StackSize,
+  IN UINTN       ShadowStackSize
   );
 
 /**
@@ -501,14 +527,6 @@ VOID *
 InitGdt (
   IN  UINTN  Cr3,
   OUT UINTN  *GdtStepSize
-  );
-
-/**
-  This function sets GDT/IDT buffer to be RO and XP.
-**/
-VOID
-PatchGdtIdtMap (
-  VOID
   );
 
 /**
@@ -690,8 +708,8 @@ SmmRelocateBases (
 VOID
 EFIAPI
 SmiPFHandler (
-    IN EFI_EXCEPTION_TYPE   InterruptType,
-    IN EFI_SYSTEM_CONTEXT   SystemContext
+  IN EFI_EXCEPTION_TYPE   InterruptType,
+  IN EFI_SYSTEM_CONTEXT   SystemContext
   );
 
 /**
@@ -1061,6 +1079,184 @@ TransferApToSafeState (
   IN UINTN  ApHltLoopCode,
   IN UINTN  TopOfStack,
   IN UINTN  NumberToFinishAddress
+  );
+
+/**
+  Set ShadowStack memory.
+
+  @param[in]  Cr3              The page table base address.
+  @param[in]  BaseAddress      The physical address that is the start address of a memory region.
+  @param[in]  Length           The size in bytes of the memory region.
+
+  @retval EFI_SUCCESS           The shadow stack memory is set.
+**/
+EFI_STATUS
+SetShadowStack (
+  IN  UINTN                                      Cr3,
+  IN  EFI_PHYSICAL_ADDRESS                       BaseAddress,
+  IN  UINT64                                     Length
+  );
+
+/**
+  Set not present memory.
+
+  @param[in]  Cr3              The page table base address.
+  @param[in]  BaseAddress      The physical address that is the start address of a memory region.
+  @param[in]  Length           The size in bytes of the memory region.
+
+  @retval EFI_SUCCESS           The not present memory is set.
+**/
+EFI_STATUS
+SetNotPresentPage (
+  IN  UINTN                                      Cr3,
+  IN  EFI_PHYSICAL_ADDRESS                       BaseAddress,
+  IN  UINT64                                     Length
+  );
+
+/**
+  Initialize the shadow stack related data structure.
+
+  @param CpuIndex     The index of CPU.
+  @param ShadowStack  The bottom of the shadow stack for this CPU.
+**/
+VOID
+InitShadowStack (
+  IN UINTN  CpuIndex,
+  IN VOID   *ShadowStack
+  );
+
+/**
+  This function set given attributes of the memory region specified by
+  BaseAddress and Length.
+
+  @param  This              The EDKII_SMM_MEMORY_ATTRIBUTE_PROTOCOL instance.
+  @param  BaseAddress       The physical address that is the start address of
+                            a memory region.
+  @param  Length            The size in bytes of the memory region.
+  @param  Attributes        The bit mask of attributes to set for the memory
+                            region.
+
+  @retval EFI_SUCCESS           The attributes were set for the memory region.
+  @retval EFI_INVALID_PARAMETER Length is zero.
+                                Attributes specified an illegal combination of
+                                attributes that cannot be set together.
+  @retval EFI_UNSUPPORTED       The processor does not support one or more
+                                bytes of the memory resource range specified
+                                by BaseAddress and Length.
+                                The bit mask of attributes is not supported for
+                                the memory resource range specified by
+                                BaseAddress and Length.
+
+**/
+EFI_STATUS
+EFIAPI
+EdkiiSmmSetMemoryAttributes (
+  IN  EDKII_SMM_MEMORY_ATTRIBUTE_PROTOCOL   *This,
+  IN  EFI_PHYSICAL_ADDRESS                  BaseAddress,
+  IN  UINT64                                Length,
+  IN  UINT64                                Attributes
+  );
+
+/**
+  This function clears given attributes of the memory region specified by
+  BaseAddress and Length.
+
+  @param  This              The EDKII_SMM_MEMORY_ATTRIBUTE_PROTOCOL instance.
+  @param  BaseAddress       The physical address that is the start address of
+                            a memory region.
+  @param  Length            The size in bytes of the memory region.
+  @param  Attributes        The bit mask of attributes to clear for the memory
+                            region.
+
+  @retval EFI_SUCCESS           The attributes were cleared for the memory region.
+  @retval EFI_INVALID_PARAMETER Length is zero.
+                                Attributes specified an illegal combination of
+                                attributes that cannot be cleared together.
+  @retval EFI_UNSUPPORTED       The processor does not support one or more
+                                bytes of the memory resource range specified
+                                by BaseAddress and Length.
+                                The bit mask of attributes is not supported for
+                                the memory resource range specified by
+                                BaseAddress and Length.
+
+**/
+EFI_STATUS
+EFIAPI
+EdkiiSmmClearMemoryAttributes (
+  IN  EDKII_SMM_MEMORY_ATTRIBUTE_PROTOCOL   *This,
+  IN  EFI_PHYSICAL_ADDRESS                  BaseAddress,
+  IN  UINT64                                Length,
+  IN  UINT64                                Attributes
+  );
+
+/**
+  This function retrieves the attributes of the memory region specified by
+  BaseAddress and Length. If different attributes are got from different part
+  of the memory region, EFI_NO_MAPPING will be returned.
+
+  @param  This              The EDKII_SMM_MEMORY_ATTRIBUTE_PROTOCOL instance.
+  @param  BaseAddress       The physical address that is the start address of
+                            a memory region.
+  @param  Length            The size in bytes of the memory region.
+  @param  Attributes        Pointer to attributes returned.
+
+  @retval EFI_SUCCESS           The attributes got for the memory region.
+  @retval EFI_INVALID_PARAMETER Length is zero.
+                                Attributes is NULL.
+  @retval EFI_NO_MAPPING        Attributes are not consistent cross the memory
+                                region.
+  @retval EFI_UNSUPPORTED       The processor does not support one or more
+                                bytes of the memory resource range specified
+                                by BaseAddress and Length.
+
+**/
+EFI_STATUS
+EFIAPI
+EdkiiSmmGetMemoryAttributes (
+  IN  EDKII_SMM_MEMORY_ATTRIBUTE_PROTOCOL   *This,
+  IN  EFI_PHYSICAL_ADDRESS                  BaseAddress,
+  IN  UINT64                                Length,
+  IN  UINT64                                *Attributes
+  );
+
+/**
+  This function fixes up the address of the global variable or function
+  referred in SmmInit assembly files to be the absoute address.
+**/
+VOID
+EFIAPI
+PiSmmCpuSmmInitFixupAddress (
+ );
+
+/**
+  This function fixes up the address of the global variable or function
+  referred in SmiEntry assembly files to be the absoute address.
+**/
+VOID
+EFIAPI
+PiSmmCpuSmiEntryFixupAddress (
+ );
+
+/**
+  This function reads CR2 register when on-demand paging is enabled
+  for 64 bit and no action for 32 bit.
+
+  @param[out]  *Cr2  Pointer to variable to hold CR2 register value.
+**/
+VOID
+SaveCr2 (
+  OUT UINTN  *Cr2
+  );
+
+/**
+  This function writes into CR2 register when on-demand paging is enabled
+  for 64 bit and no action for 32 bit.
+
+  @param[in]  Cr2  Value to write into CR2 register.
+**/
+VOID
+RestoreCr2 (
+  IN UINTN  Cr2
   );
 
 #endif

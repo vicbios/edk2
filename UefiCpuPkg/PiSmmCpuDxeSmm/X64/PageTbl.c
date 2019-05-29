@@ -1,16 +1,10 @@
 /** @file
 Page Fault (#PF) handler for X64 processors
 
-Copyright (c) 2009 - 2016, Intel Corporation. All rights reserved.<BR>
+Copyright (c) 2009 - 2019, Intel Corporation. All rights reserved.<BR>
 Copyright (c) 2017, AMD Incorporated. All rights reserved.<BR>
 
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -21,8 +15,25 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 
 LIST_ENTRY                          mPagePool = INITIALIZE_LIST_HEAD_VARIABLE (mPagePool);
 BOOLEAN                             m1GPageTableSupport = FALSE;
-UINT8                               mPhysicalAddressBits;
 BOOLEAN                             mCpuSmmStaticPageTable;
+
+/**
+  Disable CET.
+**/
+VOID
+EFIAPI
+DisableCet (
+  VOID
+  );
+
+/**
+  Enable CET.
+**/
+VOID
+EFIAPI
+EnableCet (
+  VOID
+  );
 
 /**
   Check if 1-GByte pages is supported by processor or not.
@@ -301,7 +312,9 @@ SmmInitPageTable (
     }
   }
 
-  if (FeaturePcdGet (PcdCpuSmmProfileEnable)) {
+  if (FeaturePcdGet (PcdCpuSmmProfileEnable) ||
+      HEAP_GUARD_NONSTOP_MODE ||
+      NULL_DETECTION_NONSTOP_MODE) {
     //
     // Set own Page Fault entry instead of the default one, because SMM Profile
     // feature depends on IRET instruction to do Single Step
@@ -802,8 +815,8 @@ SmiDefaultPFHandler (
 VOID
 EFIAPI
 SmiPFHandler (
-    IN EFI_EXCEPTION_TYPE   InterruptType,
-    IN EFI_SYSTEM_CONTEXT   SystemContext
+  IN EFI_EXCEPTION_TYPE   InterruptType,
+  IN EFI_SYSTEM_CONTEXT   SystemContext
   )
 {
   UINTN             PFAddress;
@@ -817,8 +830,10 @@ SmiPFHandler (
   PFAddress = AsmReadCr2 ();
 
   if (mCpuSmmStaticPageTable && (PFAddress >= LShiftU64 (1, (mPhysicalAddressBits - 1)))) {
+    DumpCpuContext (InterruptType, SystemContext);
     DEBUG ((DEBUG_ERROR, "Do not support address 0x%lx by processor!\n", PFAddress));
     CpuDeadLoop ();
+    goto Exit;
   }
 
   //
@@ -827,6 +842,7 @@ SmiPFHandler (
   //
   if ((PFAddress >= mCpuHotPlugData.SmrrBase) &&
       (PFAddress < (mCpuHotPlugData.SmrrBase + mCpuHotPlugData.SmrrSize))) {
+    DumpCpuContext (InterruptType, SystemContext);
     CpuIndex = GetCpuIndex ();
     GuardPageAddress = (mSmmStackArrayBase + EFI_PAGE_SIZE + CpuIndex * mSmmStackSize);
     if ((FeaturePcdGet (PcdCpuSmmStackGuard)) &&
@@ -834,15 +850,6 @@ SmiPFHandler (
         (PFAddress < (GuardPageAddress + EFI_PAGE_SIZE))) {
       DEBUG ((DEBUG_ERROR, "SMM stack overflow!\n"));
     } else {
-      DEBUG ((DEBUG_ERROR, "SMM exception data - 0x%lx(", SystemContext.SystemContextX64->ExceptionData));
-      DEBUG ((DEBUG_ERROR, "I:%x, R:%x, U:%x, W:%x, P:%x",
-        (SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_ID) != 0,
-        (SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_RSVD) != 0,
-        (SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_US) != 0,
-        (SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_WR) != 0,
-        (SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_P) != 0
-        ));
-      DEBUG ((DEBUG_ERROR, ")\n"));
       if ((SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_ID) != 0) {
         DEBUG ((DEBUG_ERROR, "SMM exception at execution (0x%lx)\n", PFAddress));
         DEBUG_CODE (
@@ -854,28 +861,59 @@ SmiPFHandler (
           DumpModuleInfoByIp ((UINTN)SystemContext.SystemContextX64->Rip);
         );
       }
+
+      if (HEAP_GUARD_NONSTOP_MODE) {
+        GuardPagePFHandler (SystemContext.SystemContextX64->ExceptionData);
+        goto Exit;
+      }
     }
     CpuDeadLoop ();
+    goto Exit;
   }
 
   //
-  // If a page fault occurs in SMM range
+  // If a page fault occurs in non-SMRAM range.
   //
   if ((PFAddress < mCpuHotPlugData.SmrrBase) ||
       (PFAddress >= mCpuHotPlugData.SmrrBase + mCpuHotPlugData.SmrrSize)) {
     if ((SystemContext.SystemContextX64->ExceptionData & IA32_PF_EC_ID) != 0) {
+      DumpCpuContext (InterruptType, SystemContext);
       DEBUG ((DEBUG_ERROR, "Code executed on IP(0x%lx) out of SMM range after SMM is locked!\n", PFAddress));
       DEBUG_CODE (
         DumpModuleInfoByIp (*(UINTN *)(UINTN)SystemContext.SystemContextX64->Rsp);
       );
       CpuDeadLoop ();
+      goto Exit;
     }
-    if (IsSmmCommBufferForbiddenAddress (PFAddress)) {
+
+    //
+    // If NULL pointer was just accessed
+    //
+    if ((PcdGet8 (PcdNullPointerDetectionPropertyMask) & BIT1) != 0 &&
+        (PFAddress < EFI_PAGE_SIZE)) {
+      DumpCpuContext (InterruptType, SystemContext);
+      DEBUG ((DEBUG_ERROR, "!!! NULL pointer access !!!\n"));
+      DEBUG_CODE (
+        DumpModuleInfoByIp ((UINTN)SystemContext.SystemContextX64->Rip);
+      );
+
+      if (NULL_DETECTION_NONSTOP_MODE) {
+        GuardPagePFHandler (SystemContext.SystemContextX64->ExceptionData);
+        goto Exit;
+      }
+
+      CpuDeadLoop ();
+      goto Exit;
+    }
+
+    if (mCpuSmmStaticPageTable && IsSmmCommBufferForbiddenAddress (PFAddress)) {
+      DumpCpuContext (InterruptType, SystemContext);
       DEBUG ((DEBUG_ERROR, "Access SMM communication forbidden address (0x%lx)!\n", PFAddress));
       DEBUG_CODE (
         DumpModuleInfoByIp ((UINTN)SystemContext.SystemContextX64->Rip);
       );
       CpuDeadLoop ();
+      goto Exit;
     }
   }
 
@@ -888,6 +926,7 @@ SmiPFHandler (
     SmiDefaultPFHandler ();
   }
 
+Exit:
   ReleaseSpinLock (mPFLock);
 }
 
@@ -908,8 +947,29 @@ SetPageTableAttributes (
   UINT64                *L4PageTable;
   BOOLEAN               IsSplitted;
   BOOLEAN               PageTableSplitted;
+  BOOLEAN               CetEnabled;
 
-  if (!mCpuSmmStaticPageTable) {
+  //
+  // Don't do this if
+  //  - no static page table; or
+  //  - SMM heap guard feature enabled; or
+  //      BIT2: SMM page guard enabled
+  //      BIT3: SMM pool guard enabled
+  //  - SMM profile feature enabled
+  //
+  if (!mCpuSmmStaticPageTable ||
+      ((PcdGet8 (PcdHeapGuardPropertyMask) & (BIT3 | BIT2)) != 0) ||
+      FeaturePcdGet (PcdCpuSmmProfileEnable)) {
+    //
+    // Static paging and heap guard could not be enabled at the same time.
+    //
+    ASSERT (!(mCpuSmmStaticPageTable &&
+              (PcdGet8 (PcdHeapGuardPropertyMask) & (BIT3 | BIT2)) != 0));
+
+    //
+    // Static paging and SMM profile could not be enabled at the same time.
+    //
+    ASSERT (!(mCpuSmmStaticPageTable && FeaturePcdGet (PcdCpuSmmProfileEnable)));
     return ;
   }
 
@@ -919,6 +979,13 @@ SetPageTableAttributes (
   // Disable write protection, because we need mark page table to be write protected.
   // We need *write* page table memory, to mark itself to be *read only*.
   //
+  CetEnabled = ((AsmReadCr4() & CR4_CET_ENABLE) != 0) ? TRUE : FALSE;
+  if (CetEnabled) {
+    //
+    // CET must be disabled if WP is disabled.
+    //
+    DisableCet();
+  }
   AsmWriteCr0 (AsmReadCr0() & ~CR0_WP);
 
   do {
@@ -971,6 +1038,42 @@ SetPageTableAttributes (
   // Enable write protection, after page table updated.
   //
   AsmWriteCr0 (AsmReadCr0() | CR0_WP);
+  if (CetEnabled) {
+    //
+    // re-enable CET.
+    //
+    EnableCet();
+  }
 
   return ;
+}
+
+/**
+  This function reads CR2 register when on-demand paging is enabled.
+
+  @param[out]  *Cr2  Pointer to variable to hold CR2 register value.
+**/
+VOID
+SaveCr2 (
+  OUT UINTN  *Cr2
+  )
+{
+  if (!mCpuSmmStaticPageTable) {
+    *Cr2 = AsmReadCr2 ();
+  }
+}
+
+/**
+  This function restores CR2 register when on-demand paging is enabled.
+
+  @param[in]  Cr2  Value to write into CR2 register.
+**/
+VOID
+RestoreCr2 (
+  IN UINTN  Cr2
+  )
+{
+  if (!mCpuSmmStaticPageTable) {
+    AsmWriteCr2 (Cr2);
+  }
 }

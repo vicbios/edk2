@@ -2,13 +2,7 @@
 The CPU specific programming for PiSmmCpuDxeSmm module.
 
 Copyright (c) 2010 - 2016, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -296,7 +290,9 @@ SmmCpuFeaturesInitializeProcessor (
   // Intel(R) Core(TM) Processor Family MSRs.
   //
   if (FamilyId == 0x06) {
-    if (ModelId == 0x3C || ModelId == 0x45 || ModelId == 0x46) {
+    if (ModelId == 0x3C || ModelId == 0x45 || ModelId == 0x46 ||
+        ModelId == 0x3D || ModelId == 0x47 || ModelId == 0x4E || ModelId == 0x4F ||
+        ModelId == 0x3F || ModelId == 0x56 || ModelId == 0x57 || ModelId == 0x5C) {
       //
       // Check to see if the CPU supports the SMM Code Access Check feature
       // Do not access this MSR unless the CPU supports the SmmRegFeatureControl

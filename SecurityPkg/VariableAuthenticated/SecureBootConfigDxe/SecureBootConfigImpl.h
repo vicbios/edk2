@@ -3,13 +3,7 @@
   configuration module.
 
 Copyright (c) 2011 - 2017, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -47,6 +41,7 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 #include <Guid/FileSystemVolumeLabelInfo.h>
 #include <Guid/ImageAuthentication.h>
 #include <Guid/FileInfo.h>
+#include <Guid/WinCertificate.h>
 
 #include "SecureBootConfigNvData.h"
 
@@ -66,7 +61,7 @@ extern  EFI_IFR_GUID_LABEL         *mEndLabel;
 
 #define MAX_CHAR              480
 #define TWO_BYTE_ENCODE       0x82
-
+#define BUFFER_MAX_SIZE       100
 
 //
 // SHA-256 digest size in bytes
@@ -108,8 +103,26 @@ typedef struct {
 typedef struct {
   EFI_FILE_HANDLE                   FHandle;
   UINT16                            *FileName;
+  UINT8                             FileType;
 } SECUREBOOT_FILE_CONTEXT;
 
+#define SECUREBOOT_FREE_NON_NULL(Pointer)   \
+  do {                                      \
+    if ((Pointer) != NULL) {                \
+      FreePool((Pointer));                  \
+      (Pointer) = NULL;                     \
+    }                                       \
+  } while (FALSE)
+
+#define SECUREBOOT_FREE_NON_OPCODE(Handle)  \
+  do{                                       \
+    if ((Handle) != NULL) {                 \
+      HiiFreeOpCodeHandle((Handle));        \
+    }                                       \
+  } while (FALSE)
+
+#define SIGNATURE_DATA_COUNTS(List)         \
+  (((List)->SignatureListSize - sizeof(EFI_SIGNATURE_LIST) - (List)->SignatureHeaderSize) / (List)->SignatureSize)
 
 //
 // We define another format of 5th directory entry: security directory
@@ -132,6 +145,19 @@ typedef struct {
   EFI_DEVICE_PATH_PROTOCOL          End;
 } HII_VENDOR_DEVICE_PATH;
 
+typedef enum {
+  Variable_DB,
+  Variable_DBX,
+  Variable_DBT,
+  Variable_MAX
+} CURRENT_VARIABLE_NAME;
+
+typedef enum {
+  Delete_Signature_List_All,
+  Delete_Signature_List_One,
+  Delete_Signature_Data
+}SIGNATURE_DELETE_TYPE;
+
 typedef struct {
   UINTN                             Signature;
 
@@ -142,6 +168,11 @@ typedef struct {
   SECUREBOOT_FILE_CONTEXT           *FileContext;
 
   EFI_GUID                          *SignatureGUID;
+
+  CURRENT_VARIABLE_NAME             VariableName;     // The variable name we are processing.
+  UINT32                            ListCount;        // Record current variable has how many signature list.
+  UINTN                             ListIndex;        // Record which signature list is processing.
+  BOOLEAN                           *CheckArray;      // Record whcih siganture data checked.
 } SECUREBOOT_CONFIG_PRIVATE_DATA;
 
 extern SECUREBOOT_CONFIG_PRIVATE_DATA      mSecureBootConfigPrivateDateTemplate;

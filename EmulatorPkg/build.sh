@@ -3,13 +3,7 @@
 # Copyright (c) 2008 - 2011, Apple Inc. All rights reserved.<BR>
 # Copyright (c) 2010 - 2015, Intel Corporation. All rights reserved.<BR>
 #
-# This program and the accompanying materials
-# are licensed and made available under the terms and conditions of the BSD License
-# which accompanies this distribution.  The full text of the license may be found at
-# http://opensource.org/licenses/bsd-license.php
-#
-# THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-# WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+# SPDX-License-Identifier: BSD-2-Clause-Patent
 #
 
 set -e
@@ -48,7 +42,7 @@ PLATFORMFILE=
 LAST_ARG=
 RUN_EMULATOR=no
 CLEAN_TYPE=none
-TARGET_TOOLS=GCC44
+TARGET_TOOLS=GCC48
 NETWORK_SUPPORT=
 BUILD_NEW_SHELL=
 BUILD_FAT=
@@ -93,23 +87,18 @@ case `uname` in
 
     gcc_version=$(gcc -v 2>&1 | tail -1 | awk '{print $3}')
     case $gcc_version in
-      4.5.*)
-        TARGET_TOOLS=GCC45
-        ;;
-      4.6.*)
-        TARGET_TOOLS=GCC46
-        ;;
-      4.7.*)
-        TARGET_TOOLS=GCC47
+      [1-3].*|4.[0-7].*)
+        echo EmulatorPkg requires GCC4.8 or later
+        exit 1
         ;;
       4.8.*)
         TARGET_TOOLS=GCC48
         ;;
-      4.9.*|4.1[0-9].*|5.*.*)
+      4.9.*|6.[0-2].*)
         TARGET_TOOLS=GCC49
         ;;
       *)
-        TARGET_TOOLS=GCC44
+        TARGET_TOOLS=GCC5
         ;;
     esac
     ;;
@@ -172,16 +161,16 @@ then
   PROCESSOR=$HOST_PROCESSOR
 fi
 
+BUILD_OUTPUT_DIR=$WORKSPACE/Build/Emulator$PROCESSOR
+
 case $PROCESSOR in
   IA32)
     ARCH_SIZE=32
-    BUILD_OUTPUT_DIR=$WORKSPACE/Build/Emulator32
     LIB_NAMES="ld-linux.so.2 libdl.so.2 crt1.o crti.o crtn.o"
     LIB_SEARCH_PATHS="/usr/lib/i386-linux-gnu /usr/lib32 /lib32 /usr/lib /lib"
     ;;
   X64)
     ARCH_SIZE=64
-    BUILD_OUTPUT_DIR=$WORKSPACE/Build/Emulator
     LIB_NAMES="ld-linux-x86-64.so.2 libdl.so.2 crt1.o crti.o crtn.o"
     LIB_SEARCH_PATHS="/usr/lib/x86_64-linux-gnu /usr/lib64 /lib64 /usr/lib /lib"
     ;;
@@ -238,7 +227,7 @@ if [[ "$RUN_EMULATOR" == "yes" ]]; then
       ;;
   esac
 
-  /usr/bin/gdb $BUILD_ROOT_ARCH/Host -q -cd=$BUILD_ROOT_ARCH -x $WORKSPACE/EmulatorPkg/Unix/GdbRun
+  /usr/bin/gdb $BUILD_ROOT_ARCH/Host -q -cd=$BUILD_ROOT_ARCH -x $WORKSPACE/EmulatorPkg/Unix/GdbRun.sh
   exit
 fi
 

@@ -6,18 +6,12 @@
   returned is a single 32-bit or 64-bit value, then a data structure is not
   provided for that MSR.
 
-  Copyright (c) 2016 - 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2016 - 2018, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
   @par Specification Reference:
-  Intel(R) 64 and IA-32 Architectures Software Developer's Manual, Volume 3,
-  September 2016, Chapter 35 Model-Specific-Registers (MSR), Section 35.18.
+  Intel(R) 64 and IA-32 Architectures Software Developer's Manual, Volume 4,
+  May 2018, Volume 4: Model-Specific-Registers (MSR)
 
 **/
 
@@ -872,7 +866,7 @@ typedef union {
   ///
   struct {
     ///
-    /// [Bit 0] Fast-Strings Enable. See Table 35-2.
+    /// [Bit 0] Fast-Strings Enable. See Table 2-2.
     ///
     UINT32  FastStrings:1;
     UINT32  Reserved1:1;
@@ -882,7 +876,7 @@ typedef union {
     UINT32  FPU:1;
     ///
     /// [Bit 3] Thermal Monitor 1 Enable See Section 14.7.2, "Thermal
-    /// Monitor," and see Table 35-2.
+    /// Monitor," and see Table 2-2.
     ///
     UINT32  TM1:1;
     ///
@@ -906,7 +900,7 @@ typedef union {
     ///
     UINT32  ThirdLevelCacheDisable:1;
     ///
-    /// [Bit 7] Performance Monitoring Available (R) See Table 35-2.
+    /// [Bit 7] Performance Monitoring Available (R) See Table 2-2.
     ///
     UINT32  PerformanceMonitoring:1;
     ///
@@ -935,13 +929,13 @@ typedef union {
     UINT32  FERR:1;
     ///
     /// [Bit 11] Branch Trace Storage Unavailable (BTS_UNAVILABLE) (R) See
-    /// Table 35-2. When set, the processor does not support branch trace
+    /// Table 2-2. When set, the processor does not support branch trace
     /// storage (BTS); when clear, BTS is supported.
     ///
     UINT32  BTS:1;
     ///
     /// [Bit 12] PEBS_UNAVILABLE: Processor Event Based Sampling Unavailable
-    /// (R) See Table 35-2. When set, the processor does not support processor
+    /// (R) See Table 2-2. When set, the processor does not support processor
     /// event-based sampling (PEBS); when clear, PEBS is supported.
     ///
     UINT32  PEBS:1;
@@ -961,7 +955,7 @@ typedef union {
     UINT32  TM2:1;
     UINT32  Reserved3:4;
     ///
-    /// [Bit 18] 3, 4, 6. ENABLE MONITOR FSM (R/W) See Table 35-2.
+    /// [Bit 18] 3, 4, 6. ENABLE MONITOR FSM (R/W) See Table 2-2.
     ///
     UINT32  MONITOR:1;
     ///
@@ -977,13 +971,13 @@ typedef union {
     UINT32  AdjacentCacheLinePrefetchDisable:1;
     UINT32  Reserved4:2;
     ///
-    /// [Bit 22] 3, 4, 6. Limit CPUID MAXVAL (R/W) See Table 35-2. Setting
-    /// this can cause unexpected behavior to software that depends on the
+    /// [Bit 22] 3, 4, 6. Limit CPUID MAXVAL (R/W) See Table 2-2. Setting this
+    /// can cause unexpected behavior to software that depends on the
     /// availability of CPUID leaves greater than 3.
     ///
     UINT32  LimitCpuidMaxval:1;
     ///
-    /// [Bit 23] Shared. xTPR Message Disable (R/W) See Table 35-2.
+    /// [Bit 23] Shared. xTPR Message Disable (R/W) See Table 2-2.
     ///
     UINT32  xTPR_Message_Disable:1;
     ///
@@ -1002,7 +996,7 @@ typedef union {
     UINT32  Reserved5:7;
     UINT32  Reserved6:2;
     ///
-    /// [Bit 34] Unique. XD Bit Disable (R/W) See Table 35-2.
+    /// [Bit 34] Unique. XD Bit Disable (R/W) See Table 2-2.
     ///
     UINT32  XD:1;
     UINT32  Reserved7:29;
@@ -1066,8 +1060,8 @@ typedef union {
   0, 1, 2, 3, 4, 6. Unique. Last Exception Record From Linear IP (R)  Contains
   a pointer to the last branch instruction that the processor executed prior
   to the last exception that was generated or the last interrupt that was
-  handled. See Section 17.11.3, "Last Exception Records.". Unique. From Linear
-  IP Linear address of the last branch instruction (If IA32e mode is active).
+  handled. See Section 17.13.3, "Last Exception Records.". Unique. From Linear
+  IP Linear address of the last branch instruction (If IA-32e mode is active).
   From Linear IP Linear address of the last branch instruction. Reserved.
 
   @param  ECX  MSR_PENTIUM_4_LER_FROM_LIP (0x000001D7)
@@ -1089,7 +1083,7 @@ typedef union {
   0, 1, 2, 3, 4, 6. Unique. Last Exception Record To Linear IP (R)  This area
   contains a pointer to the target of the last branch instruction that the
   processor executed prior to the last exception that was generated or the
-  last interrupt that was handled. See Section 17.11.3, "Last Exception
+  last interrupt that was handled. See Section 17.13.3, "Last Exception
   Records.". Unique. From Linear IP Linear address of the target of the last
   branch instruction (If IA-32e mode is active). From Linear IP Linear address
   of the target of the last branch instruction. Reserved.
@@ -1112,7 +1106,7 @@ typedef union {
 /**
   0, 1, 2, 3, 4, 6. Unique. Debug Control (R/W)  Controls how several debug
   features are used. Bit definitions are discussed in the referenced section.
-  See Section 17.11.1, "MSR_DEBUGCTLA MSR.".
+  See Section 17.13.1, "MSR_DEBUGCTLA MSR.".
 
   @param  ECX  MSR_PENTIUM_4_DEBUGCTLA (0x000001D9)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1134,7 +1128,7 @@ typedef union {
   0, 1, 2, 3, 4, 6. Unique. Last Branch Record Stack TOS (R/W)  Contains an
   index (0-3 or 0-15) that points to the top of the last branch record stack
   (that is, that points the index of the MSR containing the most recent branch
-  record). See Section 17.11.2, "LBR Stack for Processors Based on Intel
+  record). See Section 17.13.2, "LBR Stack for Processors Based on Intel
   NetBurst(R) Microarchitecture"; and addresses 1DBH-1DEH and 680H-68FH.
 
   @param  ECX  MSR_PENTIUM_4_LASTBRANCH_TOS (0x000001DA)
@@ -1160,7 +1154,7 @@ typedef union {
   exceptions, or interrupts that the processor took. MSR_LASTBRANCH_0 through
   MSR_LASTBRANCH_3 at 1DBH-1DEH are available only on family 0FH, models
   0H-02H. They have been replaced by the MSRs at 680H68FH and 6C0H-6CFH. See
-  Section 17.10, "Last Branch, Call Stack, Interrupt, and Exception Recording
+  Section 17.12, "Last Branch, Call Stack, Interrupt, and Exception Recording
   for Processors based on Skylake Microarchitecture.".
 
   @param  ECX  MSR_PENTIUM_4_LASTBRANCH_n
@@ -1188,7 +1182,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.2, "Performance Counters.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.2, "Performance Counters.".
 
   @param  ECX  MSR_PENTIUM_4_BPU_COUNTERn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1215,7 +1209,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.2, "Performance Counters.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.2, "Performance Counters.".
 
   @param  ECX  MSR_PENTIUM_4_MS_COUNTERn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1242,7 +1236,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.2, "Performance Counters.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.2, "Performance Counters.".
 
   @param  ECX  MSR_PENTIUM_4_FLAME_COUNTERn (0x00000308)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1269,7 +1263,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.2, "Performance Counters.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.2, "Performance Counters.".
 
   @param  ECX  MSR_PENTIUM_4_IQ_COUNTERn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1300,7 +1294,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.3, "CCCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.3, "CCCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_BPU_CCCRn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1327,7 +1321,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.3, "CCCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.3, "CCCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_MS_CCCRn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1354,7 +1348,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.3, "CCCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.3, "CCCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FLAME_CCCRn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1381,7 +1375,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.3, "CCCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.3, "CCCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_IQ_CCCRn
   @param  EAX  Lower 32-bits of MSR value.
@@ -1412,7 +1406,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_BSU_ESCR0 (0x000003A0)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1431,7 +1425,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_BSU_ESCR1 (0x000003A1)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1450,7 +1444,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FSB_ESCR0 (0x000003A2)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1469,7 +1463,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FSB_ESCR1 (0x000003A3)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1488,7 +1482,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FIRM_ESCR0 (0x000003A4)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1507,7 +1501,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FIRM_ESCR1 (0x000003A5)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1526,7 +1520,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FLAME_ESCR0 (0x000003A6)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1545,7 +1539,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_FLAME_ESCR1 (0x000003A7)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1564,7 +1558,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_DAC_ESCR0 (0x000003A8)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1583,7 +1577,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_DAC_ESCR1 (0x000003A9)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1602,7 +1596,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_MOB_ESCR0 (0x000003AA)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1621,7 +1615,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_MOB_ESCR1 (0x000003AB)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1640,7 +1634,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_PMH_ESCR0 (0x000003AC)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1659,7 +1653,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_PMH_ESCR1 (0x000003AD)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1678,7 +1672,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_SAAT_ESCR0 (0x000003AE)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1697,7 +1691,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_SAAT_ESCR1 (0x000003AF)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1716,7 +1710,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_U2L_ESCR0 (0x000003B0)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1735,7 +1729,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_U2L_ESCR1 (0x000003B1)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1754,7 +1748,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_BPU_ESCR0 (0x000003B2)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1773,7 +1767,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_BPU_ESCR1 (0x000003B3)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1792,7 +1786,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_IS_ESCR0 (0x000003B4)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1811,7 +1805,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_IS_ESCR1 (0x000003B5)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1830,7 +1824,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_ITLB_ESCR0 (0x000003B6)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1849,7 +1843,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_ITLB_ESCR1 (0x000003B7)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1868,7 +1862,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_CRU_ESCR0 (0x000003B8)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1887,7 +1881,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_CRU_ESCR1 (0x000003B9)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1906,9 +1900,9 @@ typedef union {
 
 
 /**
-  0, 1, 2. Shared. See Section 18.15.1, "ESCR MSRs." This MSR is not available
-  on later processors. It is only available on processor family 0FH, models
-  01H-02H.
+  0, 1, 2. Shared. See Section 18.6.3.1, "ESCR MSRs." This MSR is not
+  available on later processors. It is only available on processor family 0FH,
+  models 01H-02H.
 
   @param  ECX  MSR_PENTIUM_4_IQ_ESCR0 (0x000003BA)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1927,9 +1921,9 @@ typedef union {
 
 
 /**
-  0, 1, 2. Shared. See Section 18.15.1, "ESCR MSRs." This MSR is not available
-  on later processors. It is only available on processor family 0FH, models
-  01H-02H.
+  0, 1, 2. Shared. See Section 18.6.3.1, "ESCR MSRs." This MSR is not
+  available on later processors. It is only available on processor family 0FH,
+  models 01H-02H.
 
   @param  ECX  MSR_PENTIUM_4_IQ_ESCR1 (0x000003BB)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1948,7 +1942,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_RAT_ESCR0 (0x000003BC)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1967,7 +1961,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_RAT_ESCR1 (0x000003BD)
   @param  EAX  Lower 32-bits of MSR value.
@@ -1986,7 +1980,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_SSU_ESCR0 (0x000003BE)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2005,7 +1999,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_MS_ESCR0 (0x000003C0)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2024,7 +2018,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_MS_ESCR1 (0x000003C1)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2043,7 +2037,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_TBPU_ESCR0 (0x000003C2)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2062,7 +2056,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_TBPU_ESCR1 (0x000003C3)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2081,7 +2075,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_TC_ESCR0 (0x000003C4)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2100,7 +2094,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_TC_ESCR1 (0x000003C5)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2119,7 +2113,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_IX_ESCR0 (0x000003C8)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2138,7 +2132,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_IX_ESCR1 (0x000003C9)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2157,7 +2151,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_ALF_ESCRn
   @param  EAX  Lower 32-bits of MSR value.
@@ -2188,7 +2182,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Section 18.15.1, "ESCR MSRs.".
+  0, 1, 2, 3, 4, 6. Shared. See Section 18.6.3.1, "ESCR MSRs.".
 
   @param  ECX  MSR_PENTIUM_4_TC_PRECISE_EVENT (0x000003F0)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2236,7 +2230,7 @@ typedef union {
   ///
   struct {
     ///
-    /// [Bits 12:0] See Table 19-33.
+    /// [Bits 12:0] See Table 19-36.
     ///
     UINT32  EventNum:13;
     UINT32  Reserved1:11;
@@ -2247,7 +2241,7 @@ typedef union {
     ///
     /// [Bit 25] ENABLE_PEBS_MY_THR (R/W) Enables PEBS for the target logical
     /// processor when set; disables PEBS when clear (default). See Section
-    /// 18.16.3, "IA32_PEBS_ENABLE MSR," for an explanation of the target
+    /// 18.6.4.3, "IA32_PEBS_ENABLE MSR," for an explanation of the target
     /// logical processor. This bit is called ENABLE_PEBS in IA-32 processors
     /// that do not support Intel HyperThreading Technology.
     ///
@@ -2255,7 +2249,7 @@ typedef union {
     ///
     /// [Bit 26] ENABLE_PEBS_OTH_THR (R/W) Enables PEBS for the target logical
     /// processor when set; disables PEBS when clear (default). See Section
-    /// 18.16.3, "IA32_PEBS_ENABLE MSR," for an explanation of the target
+    /// 18.6.4.3, "IA32_PEBS_ENABLE MSR," for an explanation of the target
     /// logical processor. This bit is reserved for IA-32 processors that do
     /// not support Intel Hyper-Threading Technology.
     ///
@@ -2275,7 +2269,7 @@ typedef union {
 
 
 /**
-  0, 1, 2, 3, 4, 6. Shared. See Table 19-33.
+  0, 1, 2, 3, 4, 6. Shared. See Table 19-36.
 
   @param  ECX  MSR_PENTIUM_4_PEBS_MATRIX_VERT (0x000003F2)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2301,7 +2295,7 @@ typedef union {
   680H-68FH, 6C0H-6CfH are not available in processor releases before family
   0FH, model 03H. These MSRs replace MSRs previously located at
   1DBH-1DEH.which performed the same function for early releases. See Section
-  17.10, "Last Branch, Call Stack, Interrupt, and Exception Recording for
+  17.12, "Last Branch, Call Stack, Interrupt, and Exception Recording for
   Processors based on Skylake Microarchitecture.".
 
   @param  ECX  MSR_PENTIUM_4_LASTBRANCH_n_FROM_IP
@@ -2357,7 +2351,7 @@ typedef union {
   record registers on the last branch record stack (6C0H-6CFH). This part of
   the stack contains pointers to the destination instruction for one of the
   last 16 branches, exceptions, or interrupts that the processor took. See
-  Section 17.10, "Last Branch, Call Stack, Interrupt, and Exception Recording
+  Section 17.12, "Last Branch, Call Stack, Interrupt, and Exception Recording
   for Processors based on Skylake Microarchitecture.".
 
   @param  ECX  MSR_PENTIUM_4_LASTBRANCH_n_TO_IP
@@ -2409,9 +2403,9 @@ typedef union {
 
 
 /**
-  3, 4. Shared. IFSB BUSQ Event Control and Counter  Register (R/W) See
-  Section 18.21, "Performance Monitoring on 64-bit Intel Xeon Processor MP
-  with Up to 8-MByte L3 Cache.".
+  3, 4. Shared. IFSB BUSQ Event Control and Counter Register (R/W) See Section
+  18.6.6, "Performance Monitoring on 64bit Intel Xeon Processor MP with Up to
+  8-MByte L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_IFSB_BUSQ0 (0x000107CC)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2449,9 +2443,9 @@ typedef union {
 
 
 /**
-  3, 4. Shared. IFSB SNPQ Event Control and Counter  Register (R/W)  See
-  Section 18.21, "Performance Monitoring on 64-bit Intel Xeon Processor MP
-  with Up to 8-MByte L3 Cache.".
+  3, 4. Shared. IFSB SNPQ Event Control and Counter Register (R/W) See Section
+  18.6.6, "Performance Monitoring on 64bit Intel Xeon Processor MP with Up to
+  8-MByte L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_IFSB_SNPQ0 (0x000107CE)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2489,9 +2483,9 @@ typedef union {
 
 
 /**
-  3, 4. Shared. EFSB DRDY Event Control and Counter  Register (R/W)  See
-  Section 18.21, "Performance Monitoring on 64-bit Intel Xeon Processor MP
-  with Up to 8-MByte L3 Cache" for details.
+  3, 4. Shared. EFSB DRDY Event Control and Counter Register (R/W) See Section
+  18.6.6, "Performance Monitoring on 64bit Intel Xeon Processor MP with Up to
+  8-MByte L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_EFSB_DRDY0 (0x000107D0)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2529,9 +2523,9 @@ typedef union {
 
 
 /**
-  3, 4. Shared. IFSB Latency Event Control Register (R/W) See Section 18.21,
-  "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to 8-MByte
-  L3 Cache" for details.
+  3, 4. Shared. IFSB Latency Event Control Register (R/W) See Section 18.6.6,
+  "Performance Monitoring on 64bit Intel Xeon Processor MP with Up to 8-MByte
+  L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_IFSB_CTL6 (0x000107D2)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2550,8 +2544,8 @@ typedef union {
 
 
 /**
-  3, 4. Shared. IFSB Latency Event Counter Register  (R/W)  See Section 18.21,
-  "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to 8-MByte
+  3, 4. Shared. IFSB Latency Event Counter Register (R/W) See Section 18.6.6,
+  "Performance Monitoring on 64bit Intel Xeon Processor MP with Up to 8-MByte
   L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_IFSB_CNTR7 (0x000107D3)
@@ -2571,9 +2565,9 @@ typedef union {
 
 
 /**
-  6. Shared. GBUSQ Event Control and Counter Register (R/W) See Section 18.21,
-  "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to 8-MByte
-  L3 Cache.".
+  6. Shared. GBUSQ Event Control and Counter Register (R/W) See Section
+  18.6.6, "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to
+  8MByte L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_EMON_L3_CTR_CTL0 (0x000107CC)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2611,9 +2605,9 @@ typedef union {
 
 
 /**
-  6. Shared. GSNPQ Event Control and Counter Register (R/W)  See Section
-  18.21, "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to
-  8-MByte L3 Cache.".
+  6. Shared. GSNPQ Event Control and Counter Register (R/W) See Section
+  18.6.6, "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to
+  8MByte L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_EMON_L3_CTR_CTL2 (0x000107CE)
   @param  EAX  Lower 32-bits of MSR value.
@@ -2651,9 +2645,9 @@ typedef union {
 
 
 /**
-  6. Shared. FSB Event Control and Counter Register  (R/W)  See Section 18.21,
-  "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to 8-MByte
-  L3 Cache" for details.
+  6. Shared. FSB Event Control and Counter Register (R/W) See Section 18.6.6,
+  "Performance Monitoring on 64-bit Intel Xeon Processor MP with Up to 8MByte
+  L3 Cache.".
 
   @param  ECX  MSR_PENTIUM_4_EMON_L3_CTR_CTL4 (0x000107D0)
   @param  EAX  Lower 32-bits of MSR value.

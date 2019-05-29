@@ -1,14 +1,8 @@
 /** @file
-  HMAC-SHA1 Wrapper Implementation which does not provide real capabilities.  
+  HMAC-SHA1 Wrapper Implementation which does not provide real capabilities.
 
-Copyright (c) 2012, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2012 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -16,6 +10,8 @@ WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 
 /**
   Retrieves the size, in bytes, of the context buffer required for HMAC-SHA1 operations.
+  (NOTE: This API is deprecated.
+         Use HmacSha1New() / HmacSha1Free() for HMAC-SHA1 Context operations.)
 
   Return zero to indicate this interface is not supported.
 
@@ -33,10 +29,46 @@ HmacSha1GetContextSize (
 }
 
 /**
+  Allocates and initializes one HMAC_CTX context for subsequent HMAC-SHA1 use.
+
+  Return NULL to indicate this interface is not supported.
+
+  @return  NULL  This interface is not supported..
+
+**/
+VOID *
+EFIAPI
+HmacSha1New (
+  VOID
+  )
+{
+  ASSERT (FALSE);
+  return NULL;
+}
+
+/**
+  Release the specified HMAC_CTX context.
+
+  This function will do nothing.
+
+  @param[in]  HmacSha1Ctx  Pointer to the HMAC_CTX context to be released.
+
+**/
+VOID
+EFIAPI
+HmacSha1Free (
+  IN  VOID  *HmacSha1Ctx
+  )
+{
+  ASSERT (FALSE);
+  return;
+}
+
+/**
   Initializes user-supplied memory pointed by HmacSha1Context as HMAC-SHA1 context for
   subsequent use.
 
-  Return FALSE to indicate this interface is not supported.  
+  Return FALSE to indicate this interface is not supported.
 
   @param[out]  HmacSha1Context  Pointer to HMAC-SHA1 context being initialized.
   @param[in]   Key              Pointer to the user-supplied key.
@@ -82,7 +114,7 @@ HmacSha1Duplicate (
 /**
   Digests the input data and updates HMAC-SHA1 context.
 
-  Return FALSE to indicate this interface is not supported.  
+  Return FALSE to indicate this interface is not supported.
 
   @param[in, out]  HmacSha1Context Pointer to the HMAC-SHA1 context.
   @param[in]       Data            Pointer to the buffer containing the data to be digested.
@@ -106,7 +138,7 @@ HmacSha1Update (
 /**
   Completes computation of the HMAC-SHA1 digest value.
 
-  Return FALSE to indicate this interface is not supported.  
+  Return FALSE to indicate this interface is not supported.
 
   @param[in, out]  HmacSha1Context  Pointer to the HMAC-SHA1 context.
   @param[out]      HmacValue        Pointer to a buffer that receives the HMAC-SHA1 digest

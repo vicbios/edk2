@@ -1,14 +1,8 @@
 /** @file
   CPU Features DXE driver to initialize CPU features.
 
-  Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2017 - 2018, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -19,6 +13,7 @@
 #include <Library/UefiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/RegisterCpuFeaturesLib.h>
+#include <Library/HobLib.h>
 
 #include <Protocol/SmmConfiguration.h>
 #include <Guid/CpuFeaturesInitDone.h>
@@ -101,6 +96,25 @@ CpuFeaturesDxeInitialize (
   )
 {
   VOID        *Registration;
+  EFI_STATUS  Status;
+  EFI_HANDLE  Handle;
+
+  if (GetFirstGuidHob (&gEdkiiCpuFeaturesInitDoneGuid) != NULL) {
+    //
+    // Try to find HOB first. This HOB exist means CPU features have
+    // been initialized by CpuFeaturesPei driver, just install
+    // gEdkiiCpuFeaturesInitDoneGuid.
+    //
+    Handle = NULL;
+    Status = gBS->InstallProtocolInterface (
+                    &Handle,
+                    &gEdkiiCpuFeaturesInitDoneGuid,
+                    EFI_NATIVE_INTERFACE,
+                    NULL
+                    );
+    ASSERT_EFI_ERROR (Status);
+    return Status;
+  }
 
   if (PcdGetBool (PcdCpuFeaturesInitAfterSmmRelocation)) {
     //

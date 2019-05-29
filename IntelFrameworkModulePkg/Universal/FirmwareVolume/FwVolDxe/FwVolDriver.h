@@ -1,16 +1,9 @@
 /** @file
   Common defines and definitions for a FwVolDxe driver.
 
-  Copyright (c) 2006 - 2015, Intel Corporation. All rights reserved.<BR>
+  Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions
-  of the BSD License which accompanies this distribution.  The
-  full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -33,6 +26,7 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/UefiBootServicesTableLib.h>
+#include <Library/HobLib.h>
 
 #define FV_DEVICE_SIGNATURE           SIGNATURE_32 ('_', 'F', 'V', '_')
 
@@ -128,7 +122,7 @@ FvGetVolumeAttributes (
                         unsuccessful return, FvAttributes is not
                         modified and the firmware volume
                         settings are not changed.
-  
+
   @retval EFI_SUCCESS             The requested firmware volume attributes
                                   were set and the resulting
                                   EFI_FV_ATTRIBUTES is returned in
@@ -597,7 +591,7 @@ FvCreateNewFileInsidePadFile (
 
   @param FvDevice        Firmware Volume Device.
   @param NumOfFiles      Total File number to be written.
-  @param FileData        The array of EFI_FV_WRITE_FILE_DATA structure, 
+  @param FileData        The array of EFI_FV_WRITE_FILE_DATA structure,
                          used to get name, attributes, type, etc
   @param FileOperation   The array of operation for each file.
 

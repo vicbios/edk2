@@ -1,14 +1,8 @@
 /** @file
   Perform the platform memory test
 
-Copyright (c) 2004 - 2017, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -282,7 +276,7 @@ BdsMemoryTest (
     FreePool (Pos);
     return EFI_SUCCESS;
   }
-  
+
   if (!FeaturePcdGet(PcdBootlogoOnlyEnable)) {
     TmpStr = GetStringById (STRING_TOKEN (STR_ESC_TO_SKIP_MEM_TEST));
 
@@ -310,7 +304,7 @@ BdsMemoryTest (
 
       ASSERT (0);
     }
-    
+
     if (!FeaturePcdGet(PcdBootlogoOnlyEnable)) {
       TempData = (UINT32) DivU64x32 (TotalMemorySize, 16);
       TestPercent = (UINTN) DivU64x32 (
@@ -326,7 +320,7 @@ BdsMemoryTest (
           //
           StrnCatS (
             StrPercent,
-            sizeof (StrPercent) / sizeof (CHAR16), 
+            sizeof (StrPercent) / sizeof (CHAR16),
             TmpStr,
             sizeof (StrPercent) / sizeof (CHAR16) - StrLen (StrPercent) - 1
             );
@@ -412,11 +406,11 @@ Done:
       100,
       (UINTN) PreviousValue
       );
-    
+
   } else {
     DEBUG ((EFI_D_INFO, "%d bytes of system memory tested OK\r\n", TotalMemorySize));
   }
-  
+
   FreePool (Pos);
 
 

@@ -3,30 +3,29 @@
 
   Copyright (C) 2015-2016, Red Hat, Inc.
   Copyright (c) 2014, ARM Ltd. All rights reserved.<BR>
-  Copyright (c) 2004 - 2016, Intel Corporation. All rights reserved.<BR>
+  Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
   Copyright (c) 2016, Linaro Ltd. All rights reserved.<BR>
 
-  This program and the accompanying materials are licensed and made available
-  under the terms and conditions of the BSD License which accompanies this
-  distribution. The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS, WITHOUT
-  WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
 #include <IndustryStandard/Pci22.h>
 #include <Library/BootLogoLib.h>
+#include <Library/CapsuleLib.h>
 #include <Library/DevicePathLib.h>
+#include <Library/HobLib.h>
 #include <Library/PcdLib.h>
 #include <Library/UefiBootManagerLib.h>
 #include <Library/UefiLib.h>
+#include <Library/UefiRuntimeServicesTableLib.h>
 #include <Protocol/DevicePath.h>
+#include <Protocol/EsrtManagement.h>
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/PciIo.h>
 #include <Protocol/PciRootBridgeIo.h>
+#include <Protocol/PlatformBootManager.h>
 #include <Guid/EventGroup.h>
 #include <Guid/TtyTerm.h>
 
@@ -389,6 +388,106 @@ PlatformRegisterFvBootOption (
 
 STATIC
 VOID
+GetPlatformOptions (
+  VOID
+  )
+{
+  EFI_STATUS                      Status;
+  EFI_BOOT_MANAGER_LOAD_OPTION    *CurrentBootOptions;
+  EFI_BOOT_MANAGER_LOAD_OPTION    *BootOptions;
+  EFI_INPUT_KEY                   *BootKeys;
+  PLATFORM_BOOT_MANAGER_PROTOCOL  *PlatformBootManager;
+  UINTN                           CurrentBootOptionCount;
+  UINTN                           Index;
+  UINTN                           BootCount;
+
+  Status = gBS->LocateProtocol (&gPlatformBootManagerProtocolGuid, NULL,
+                  (VOID **)&PlatformBootManager);
+  if (EFI_ERROR (Status)) {
+    return;
+  }
+  Status = PlatformBootManager->GetPlatformBootOptionsAndKeys (
+                                  &BootCount,
+                                  &BootOptions,
+                                  &BootKeys
+                                  );
+  if (EFI_ERROR (Status)) {
+    return;
+  }
+  //
+  // Fetch the existent boot options. If there are none, CurrentBootCount
+  // will be zeroed.
+  //
+  CurrentBootOptions = EfiBootManagerGetLoadOptions (
+                         &CurrentBootOptionCount,
+                         LoadOptionTypeBoot
+                         );
+  //
+  // Process the platform boot options.
+  //
+  for (Index = 0; Index < BootCount; Index++) {
+    INTN    Match;
+    UINTN   BootOptionNumber;
+
+    //
+    // If there are any preexistent boot options, and the subject platform boot
+    // option is already among them, then don't try to add it. Just get its
+    // assigned boot option number so we can associate a hotkey with it. Note
+    // that EfiBootManagerFindLoadOption() deals fine with (CurrentBootOptions
+    // == NULL) if (CurrentBootCount == 0).
+    //
+    Match = EfiBootManagerFindLoadOption (
+              &BootOptions[Index],
+              CurrentBootOptions,
+              CurrentBootOptionCount
+              );
+    if (Match >= 0) {
+      BootOptionNumber = CurrentBootOptions[Match].OptionNumber;
+    } else {
+      //
+      // Add the platform boot options as a new one, at the end of the boot
+      // order. Note that if the platform provided this boot option with an
+      // unassigned option number, then the below function call will assign a
+      // number.
+      //
+      Status = EfiBootManagerAddLoadOptionVariable (
+                 &BootOptions[Index],
+                 MAX_UINTN
+                 );
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: failed to register \"%s\": %r\n",
+          __FUNCTION__, BootOptions[Index].Description, Status));
+        continue;
+      }
+      BootOptionNumber = BootOptions[Index].OptionNumber;
+    }
+
+    //
+    // Register a hotkey with the boot option, if requested.
+    //
+    if (BootKeys[Index].UnicodeChar == L'\0') {
+      continue;
+    }
+
+    Status = EfiBootManagerAddKeyOptionVariable (
+               NULL,
+               BootOptionNumber,
+               0,
+               &BootKeys[Index],
+               NULL
+               );
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: failed to register hotkey for \"%s\": %r\n",
+        __FUNCTION__, BootOptions[Index].Description, Status));
+    }
+  }
+  EfiBootManagerFreeLoadOptions (CurrentBootOptions, CurrentBootOptionCount);
+  EfiBootManagerFreeLoadOptions (BootOptions, BootCount);
+  FreePool (BootKeys);
+}
+
+STATIC
+VOID
 PlatformRegisterOptionsAndKeys (
   VOID
   )
@@ -398,6 +497,8 @@ PlatformRegisterOptionsAndKeys (
   EFI_INPUT_KEY                F2;
   EFI_INPUT_KEY                Esc;
   EFI_BOOT_MANAGER_LOAD_OPTION BootOption;
+
+  GetPlatformOptions ();
 
   //
   // Register ENTER as CONTINUE key
@@ -497,6 +598,58 @@ PlatformBootManagerBeforeConsole (
   PlatformRegisterOptionsAndKeys ();
 }
 
+STATIC
+VOID
+HandleCapsules (
+  VOID
+  )
+{
+  ESRT_MANAGEMENT_PROTOCOL    *EsrtManagement;
+  EFI_PEI_HOB_POINTERS        HobPointer;
+  EFI_CAPSULE_HEADER          *CapsuleHeader;
+  BOOLEAN                     NeedReset;
+  EFI_STATUS                  Status;
+
+  DEBUG ((DEBUG_INFO, "%a: processing capsules ...\n", __FUNCTION__));
+
+  Status = gBS->LocateProtocol (&gEsrtManagementProtocolGuid, NULL,
+                  (VOID **)&EsrtManagement);
+  if (!EFI_ERROR (Status)) {
+    EsrtManagement->SyncEsrtFmp ();
+  }
+
+  //
+  // Find all capsule images from hob
+  //
+  HobPointer.Raw = GetHobList ();
+  NeedReset = FALSE;
+  while ((HobPointer.Raw = GetNextHob (EFI_HOB_TYPE_UEFI_CAPSULE,
+                             HobPointer.Raw)) != NULL) {
+    CapsuleHeader = (VOID *)(UINTN)HobPointer.Capsule->BaseAddress;
+
+    Status = ProcessCapsuleImage (CapsuleHeader);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: failed to process capsule %p - %r\n",
+        __FUNCTION__, CapsuleHeader, Status));
+      return;
+    }
+
+    NeedReset = TRUE;
+    HobPointer.Raw = GET_NEXT_HOB (HobPointer);
+  }
+
+  if (NeedReset) {
+      DEBUG ((DEBUG_WARN, "%a: capsule update successful, resetting ...\n",
+        __FUNCTION__));
+
+      gRT->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL);
+      CpuDeadLoop();
+  }
+}
+
+
+#define VERSION_STRING_PREFIX    L"Tianocore/EDK2 firmware version "
+
 /**
   Do the platform specific action after the console is ready
   Possible things that can be done in PlatformBootManagerAfterConsole:
@@ -514,19 +667,51 @@ PlatformBootManagerAfterConsole (
   VOID
   )
 {
-  EFI_STATUS      Status;
+  EFI_STATUS                    Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL  *GraphicsOutput;
+  UINTN                         FirmwareVerLength;
+  UINTN                         PosX;
+  UINTN                         PosY;
+
+  FirmwareVerLength = StrLen (PcdGetPtr (PcdFirmwareVersionString));
 
   //
   // Show the splash screen.
   //
   Status = BootLogoEnableLogo ();
   if (EFI_ERROR (Status)) {
+    if (FirmwareVerLength > 0) {
+      Print (VERSION_STRING_PREFIX L"%s\n",
+        PcdGetPtr (PcdFirmwareVersionString));
+    }
     Print (L"Press ESCAPE for boot options ");
+  } else if (FirmwareVerLength > 0) {
+    Status = gBS->HandleProtocol (gST->ConsoleOutHandle,
+                    &gEfiGraphicsOutputProtocolGuid, (VOID **)&GraphicsOutput);
+    if (!EFI_ERROR (Status)) {
+      PosX = (GraphicsOutput->Mode->Info->HorizontalResolution -
+              (StrLen (VERSION_STRING_PREFIX) + FirmwareVerLength) *
+              EFI_GLYPH_WIDTH) / 2;
+      PosY = 0;
+
+      PrintXY (PosX, PosY, NULL, NULL, VERSION_STRING_PREFIX L"%s",
+        PcdGetPtr (PcdFirmwareVersionString));
+    }
   }
+
   //
   // Connect the rest of the devices.
   //
   EfiBootManagerConnectAll ();
+
+  //
+  // On ARM, there is currently no reason to use the phased capsule
+  // update approach where some capsules are dispatched before EndOfDxe
+  // and some are dispatched after. So just handle all capsules here,
+  // when the console is up and we can actually give the user some
+  // feedback about what is going on.
+  //
+  HandleCapsules ();
 
   //
   // Enumerate all possible boot options.
@@ -574,4 +759,20 @@ PlatformBootManagerWaitCallback (
   if (EFI_ERROR (Status)) {
     Print (L".");
   }
+}
+
+/**
+  The function is called when no boot option could be launched,
+  including platform recovery options and options pointing to applications
+  built into firmware volumes.
+
+  If this function returns, BDS attempts to enter an infinite loop.
+**/
+VOID
+EFIAPI
+PlatformBootManagerUnableToBoot (
+  VOID
+  )
+{
+  return;
 }

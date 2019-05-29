@@ -1,14 +1,8 @@
 /** @file
   Header file for boot maintenance module.
 
-Copyright (c) 2004 - 2014, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -473,7 +467,7 @@ BOpt_GetBootOptions (
 
   @return EFI_SUCESS The functin completes successfully.
   @retval EFI_OUT_OF_RESOURCES Not enough memory to compete the operation.
-  
+
 
 **/
 EFI_STATUS
@@ -548,22 +542,6 @@ BOpt_IsEfiImageName (
   IN UINT16  *FileName
   );
 
-/**
-
-  Check whether current FileName point to a valid Efi Application
-
-  @param Dir       Pointer to current Directory
-  @param FileName  Pointer to current File name.
-
-  @retval TRUE      Is a valid Efi Application
-  @retval FALSE     not a valid Efi Application
-
-**/
-BOOLEAN
-BOpt_IsEfiApp (
-  IN EFI_FILE_HANDLE Dir,
-  IN UINT16          *FileName
-  );
 
 /**
 
@@ -702,26 +680,14 @@ FreeAllConsoles (
   VOID
   );
 
-/**
-  Update the device path that describing a terminal device
-  based on the new BaudRate, Data Bits, parity and Stop Bits
-  set.
-
-  @param DevicePath     The devicepath protocol instance wanted to be updated.
-
-**/
-VOID
-ChangeVariableDevicePath (
-  IN OUT EFI_DEVICE_PATH_PROTOCOL  *DevicePath
-  );
 
 /**
   Update the multi-instance device path of Terminal Device based on
-  the global TerminalMenu. If ChangeTernimal is TRUE, the terminal 
+  the global TerminalMenu. If ChangeTernimal is TRUE, the terminal
   device path in the Terminal Device in TerminalMenu is also updated.
 
   @param DevicePath      The multi-instance device path.
-  @param ChangeTerminal  TRUE, then device path in the Terminal Device 
+  @param ChangeTerminal  TRUE, then device path in the Terminal Device
                          in TerminalMenu is also updated; FALSE, no update.
 
   @return EFI_SUCCESS    The function completes successfully.
@@ -737,8 +703,8 @@ ChangeTerminalDevicePath (
 // Variable operation by menu selection
 //
 /**
-  This function create a currently loaded Boot Option from 
-  the BMM. It then appends this Boot Option to the end of 
+  This function create a currently loaded Boot Option from
+  the BMM. It then appends this Boot Option to the end of
   the "BootOrder" list. It also append this Boot Opotion to the end
   of BootOptionMenu.
 
@@ -760,9 +726,9 @@ Var_UpdateBootOption (
   After deleting this boot option, call Var_ChangeBootOrder to
   make sure BootOrder is in valid state.
 
-  @retval EFI_SUCCESS   If all boot load option EFI Variables corresponding to  
+  @retval EFI_SUCCESS   If all boot load option EFI Variables corresponding to
                         BM_LOAD_CONTEXT marked for deletion is deleted
-  @return Others        If failed to update the "BootOrder" variable after deletion. 
+  @return Others        If failed to update the "BootOrder" variable after deletion.
 
 **/
 EFI_STATUS
@@ -786,8 +752,8 @@ Var_ChangeBootOrder (
   );
 
 /**
-  This function create a currently loaded Drive Option from 
-  the BMM. It then appends this Driver Option to the end of 
+  This function create a currently loaded Drive Option from
+  the BMM. It then appends this Driver Option to the end of
   the "DriverOrder" list. It append this Driver Opotion to the end
   of DriverOptionMenu.
 
@@ -875,18 +841,9 @@ Var_UpdateErrorOutOption (
   VOID
   );
 
-/**
-  Update the device path of "ConOut", "ConIn" and "ErrOut" based on the new BaudRate, Data Bits, 
-  parity and stop Bits set.
-
-**/
-VOID
-Var_UpdateAllConsoleOption (
-  VOID
-  );
 
 /**
-  This function update the "BootNext" EFI Variable. If there is no "BootNex" specified in BMM, 
+  This function update the "BootNext" EFI Variable. If there is no "BootNex" specified in BMM,
   this EFI Variable is deleted.
   It also update the BMM context data specified the "BootNext" value.
 
@@ -902,7 +859,7 @@ Var_UpdateBootNext (
   );
 
 /**
-  This function update the "BootOrder" EFI Variable based on BMM Formset's NV map. It then refresh 
+  This function update the "BootOrder" EFI Variable based on BMM Formset's NV map. It then refresh
   BootOptionMenu with the new "BootOrder" list.
 
   @param CallbackData           The BMM context data.
@@ -980,7 +937,7 @@ RefreshUpdateData (
 
 /**
   Clean up the dynamic opcode at label and form specified by
-  both LabelId. 
+  both LabelId.
 
   @param LabelId         It is both the Form ID and Label ID for
                          opcode deletion.
@@ -1154,22 +1111,6 @@ EfiLibFileInfo (
   IN EFI_FILE_HANDLE      FHand
   );
 
-/**
-  Adjusts the size of a previously allocated buffer.
-
-  @param OldPool         A pointer to the buffer whose size is being adjusted.
-  @param OldSize         The size of the current buffer.
-  @param NewSize         The size of the new buffer.
-
-  @return   The newly allocated buffer. if NULL, allocation failed.
-
-**/
-VOID*
-EfiReallocatePool (
-  IN VOID                 *OldPool,
-  IN UINTN                OldSize,
-  IN UINTN                NewSize
-  );
 
 /**
   Function deletes the variable specified by VarName and VarGuid.
@@ -1177,7 +1118,7 @@ EfiReallocatePool (
 
   @param VarName            A Null-terminated Unicode string that is
                             the name of the vendor's variable.
-                         
+
   @param VarGuid            A unique identifier for the vendor.
 
   @retval  EFI_SUCCESS           The variable was found and removed
@@ -1242,7 +1183,7 @@ CreateMenuStringToken (
   );
 
 /**
-  Get a string from the Data Hub record based on 
+  Get a string from the Data Hub record based on
   a device path.
 
   @param DevPath         The device Path.
@@ -1450,7 +1391,7 @@ FileExplorerCallback (
 
   @param[in]  This                Points to the EFI_HII_CONFIG_ACCESS_PROTOCOL.
   @param[in]  Configuration       A null-terminated Unicode string in
-                                  <ConfigString> format.   
+                                  <ConfigString> format.
   @param[out] Progress            A pointer to a string filled in with the
                                   offset of the most recent '&' before the
                                   first failing name / value pair (or the
@@ -1460,7 +1401,7 @@ FileExplorerCallback (
                                   successful.
 
   @retval EFI_SUCCESS             The results have been distributed or are
-                                  awaiting distribution.  
+                                  awaiting distribution.
   @retval EFI_OUT_OF_RESOURCES    Not enough memory to store the
                                   parts of the results that must be
                                   stored awaiting possible future
@@ -1513,12 +1454,12 @@ EfiLibGetVariable (
   );
 
 /**
-  Get option number according to Boot#### and BootOrder variable. 
+  Get option number according to Boot#### and BootOrder variable.
   The value is saved as #### + 1.
 
   @param CallbackData    The BMM context data.
 **/
-VOID  
+VOID
 GetBootOrder (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );
@@ -1527,9 +1468,9 @@ GetBootOrder (
   Get driver option order from globalc DriverOptionMenu.
 
   @param CallbackData    The BMM context data.
-  
+
 **/
-VOID  
+VOID
 GetDriverOrder (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );
@@ -1562,7 +1503,7 @@ VOID
 GetLegacyDeviceOrder (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );
-  
+
 /**
 
   Initialize console input device check box to ConsoleInCheck[MAX_MENU_NUMBER]
@@ -1570,12 +1511,12 @@ GetLegacyDeviceOrder (
 
   @param CallbackData    The BMM context data.
 
-**/  
-VOID  
+**/
+VOID
 GetConsoleInCheck (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );
-  
+
 /**
 
   Initialize console output device check box to ConsoleOutCheck[MAX_MENU_NUMBER]
@@ -1583,8 +1524,8 @@ GetConsoleInCheck (
 
   @param CallbackData    The BMM context data.
 
-**/      
-VOID    
+**/
+VOID
 GetConsoleOutCheck (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );
@@ -1596,8 +1537,8 @@ GetConsoleOutCheck (
 
   @param CallbackData    The BMM context data.
 
-**/        
-VOID  
+**/
+VOID
 GetConsoleErrCheck (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );
@@ -1609,8 +1550,8 @@ GetConsoleErrCheck (
 
   @param CallbackData    The BMM context data.
 
-**/        
-VOID  
+**/
+VOID
 GetTerminalAttribute (
   IN  BMM_CALLBACK_DATA    *CallbackData
   );

@@ -1,15 +1,9 @@
 /** @file
   A faked PS/2 Absolute Pointer driver. Routines that interacts with callers,
   conforming to EFI driver model
-  
-Copyright (c) 2006 - 2012, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
 
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -230,7 +224,7 @@ PS2MouseAbsolutePointerDriverStart (
   //
   // Initialize keyboard controller if necessary
   //
-  REPORT_STATUS_CODE_WITH_DEVICE_PATH (  
+  REPORT_STATUS_CODE_WITH_DEVICE_PATH (
     EFI_PROGRESS_CODE,
     EFI_PERIPHERAL_MOUSE | EFI_P_MOUSE_PC_SELF_TEST,
     ParentDevicePath
@@ -640,7 +634,7 @@ CheckMouseAbsolutePointerConnect (
 
 /**
   Get and Clear mouse status.
-  
+
   @param This                 - Pointer of simple pointer Protocol.
   @param State                - Output buffer holding status.
 
@@ -743,9 +737,9 @@ PollMouseAbsolutePointer(
 /**
   The user Entry Point for module Ps2MouseAbsolutePointer. The user code starts with this function.
 
-  @param[in] ImageHandle    The firmware allocated handle for the EFI image.  
+  @param[in] ImageHandle    The firmware allocated handle for the EFI image.
   @param[in] SystemTable    A pointer to the EFI System Table.
-  
+
   @retval EFI_SUCCESS       The entry point is executed successfully.
   @retval other             Some error occurs when executing this entry point.
 

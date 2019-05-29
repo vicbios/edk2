@@ -6,18 +6,12 @@
   returned is a single 32-bit or 64-bit value, then a data structure is not
   provided for that MSR.
 
-  Copyright (c) 2016 - 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2016 - 2018, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
   @par Specification Reference:
-  Intel(R) 64 and IA-32 Architectures Software Developer's Manual, Volume 3,
-  September 2016, Chapter 35 Model-Specific-Registers (MSR), Section 35.22.
+  Intel(R) 64 and IA-32 Architectures Software Developer's Manual, Volume 4,
+  May 2018, Volume 4: Model-Specific-Registers (MSR)
 
 **/
 
@@ -83,7 +77,7 @@
 
 
 /**
-  See Section 17.15, "Time-Stamp Counter.".
+  See Section 17.17, "Time-Stamp Counter.".
 
   @param  ECX  MSR_PENTIUM_TSC (0x00000010)
   @param  EAX  Lower 32-bits of MSR value.
@@ -102,7 +96,7 @@
 
 
 /**
-  See Section 18.24.1, "Control and Event Select Register (CESR).".
+  See Section 18.6.9.1, "Control and Event Select Register (CESR).".
 
   @param  ECX  MSR_PENTIUM_CESR (0x00000011)
   @param  EAX  Lower 32-bits of MSR value.
@@ -121,7 +115,7 @@
 
 
 /**
-  Section 18.24.3, "Events Counted.".
+  Section 18.6.9.3, "Events Counted.".
 
   @param  ECX  MSR_PENTIUM_CTRn
   @param  EAX  Lower 32-bits of MSR value.

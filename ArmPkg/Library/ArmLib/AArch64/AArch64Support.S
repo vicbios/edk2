@@ -1,16 +1,10 @@
 #------------------------------------------------------------------------------
 #
 # Copyright (c) 2008 - 2010, Apple Inc. All rights reserved.<BR>
-# Copyright (c) 2011 - 2014, ARM Limited. All rights reserved.
+# Copyright (c) 2011 - 2017, ARM Limited. All rights reserved.
 # Copyright (c) 2016, Linaro Limited. All rights reserved.
 #
-# This program and the accompanying materials
-# are licensed and made available under the terms and conditions of the BSD License
-# which accompanies this distribution.  The full text of the license may be found at
-# http://opensource.org/licenses/bsd-license.php
-#
-# THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-# WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+# SPDX-License-Identifier: BSD-2-Clause-Patent
 #
 #------------------------------------------------------------------------------
 
@@ -403,9 +397,11 @@ ASM_FUNC(ArmEnableVFP)
   mov   x1, x30                 // Save LR
   bl    ArmReadIdPfr0           // Read EL1 Processor Feature Register (PFR0)
   mov   x30, x1                 // Restore LR
-  ands  x0, x0, #AARCH64_PFR0_FP// Extract bits indicating VFP implementation
-  cmp   x0, #0                  // VFP is implemented if '0'.
-  b.ne  4f                      // Exit if VFP not implemented.
+  ubfx  x0, x0, #16, #4         // Extract the FP bits 16:19
+  cmp   x0, #0xF                // Check if FP bits are '1111b',
+                                // i.e. Floating Point not implemented
+  b.eq  4f                      // Exit when VFP is not implemented.
+
   // FVP is implemented.
   // Make sure VFP exceptions are not trapped (to any exception level).
   mrs   x0, cpacr_el1           // Read EL1 Coprocessor Access Control Register (CPACR)
@@ -478,6 +474,16 @@ ASM_FUNC(ArmReadHcr)
 // UINTN ArmReadCurrentEL(VOID)
 ASM_FUNC(ArmReadCurrentEL)
   mrs   x0, CurrentEL
+  ret
+
+// UINT32 ArmReadCntHctl(VOID)
+ASM_FUNC(ArmReadCntHctl)
+  mrs   x0, cnthctl_el2
+  ret
+
+// VOID ArmWriteCntHctl(UINT32 CntHctl)
+ASM_FUNC(ArmWriteCntHctl)
+  msr   cnthctl_el2, x0
   ret
 
 ASM_FUNCTION_REMOVE_IF_UNREFERENCED

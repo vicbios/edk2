@@ -2,17 +2,33 @@
   X2Apic feature.
 
   Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
 #include "CpuCommonFeatures.h"
+
+/**
+  Prepares for the data used by CPU feature detection and initialization.
+
+  @param[in]  NumberOfProcessors  The number of CPUs in the platform.
+
+  @return  Pointer to a buffer of CPU related configuration data.
+
+  @note This service could be called by BSP only.
+**/
+VOID *
+EFIAPI
+X2ApicGetConfigData (
+  IN UINTN  NumberOfProcessors
+  )
+{
+  BOOLEAN                            *ConfigData;
+
+  ConfigData = AllocateZeroPool (sizeof (BOOLEAN) * NumberOfProcessors);
+  ASSERT (ConfigData != NULL);
+  return ConfigData;
+}
 
 /**
   Detects if X2Apci feature supported on current processor.
@@ -40,7 +56,16 @@ X2ApicSupport (
   IN VOID                              *ConfigData  OPTIONAL
   )
 {
-  return (GetApicMode () == LOCAL_APIC_MODE_X2APIC);
+  BOOLEAN                            *X2ApicEnabled;
+
+  ASSERT (ConfigData != NULL);
+  X2ApicEnabled = (BOOLEAN *) ConfigData;
+  //
+  // *ConfigData indicates if X2APIC enabled on current processor
+  //
+  X2ApicEnabled[ProcessorNumber] = (GetApicMode () == LOCAL_APIC_MODE_X2APIC) ? TRUE : FALSE;
+
+  return (CpuInfo->CpuIdVersionInfoEcx.Bits.x2APIC == 1);
 }
 
 /**
@@ -69,13 +94,44 @@ X2ApicInitialize (
   IN BOOLEAN                           State
   )
 {
-  PRE_SMM_CPU_REGISTER_TABLE_WRITE_FIELD (
-    ProcessorNumber,
-    Msr,
-    MSR_IA32_APIC_BASE,
-    MSR_IA32_APIC_BASE_REGISTER,
-    Bits.EXTD,
-    (State) ? 1 : 0
-    );
+  BOOLEAN                            *X2ApicEnabled;
+
+  //
+  // The scope of the MSR_IA32_APIC_BASE is core for below processor type, only program
+  // MSR_IA32_APIC_BASE for thread 0 in each core.
+  //
+  if (IS_SILVERMONT_PROCESSOR (CpuInfo->DisplayFamily, CpuInfo->DisplayModel)) {
+    if (CpuInfo->ProcessorInfo.Location.Thread != 0) {
+      return RETURN_SUCCESS;
+    }
+  }
+
+  ASSERT (ConfigData != NULL);
+  X2ApicEnabled = (BOOLEAN *) ConfigData;
+  if (X2ApicEnabled[ProcessorNumber]) {
+    PRE_SMM_CPU_REGISTER_TABLE_WRITE_FIELD (
+      ProcessorNumber,
+      Msr,
+      MSR_IA32_APIC_BASE,
+      MSR_IA32_APIC_BASE_REGISTER,
+      Bits.EXTD,
+      1
+      );
+  } else {
+    //
+    // Enable X2APIC mode only if X2APIC is not enabled,
+    // Needn't to disabe X2APIC mode again if X2APIC is not enabled
+    //
+    if (State) {
+      CPU_REGISTER_TABLE_WRITE_FIELD (
+        ProcessorNumber,
+        Msr,
+        MSR_IA32_APIC_BASE,
+        MSR_IA32_APIC_BASE_REGISTER,
+        Bits.EXTD,
+        1
+        );
+    }
+  }
   return RETURN_SUCCESS;
 }

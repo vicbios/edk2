@@ -1,16 +1,9 @@
 /** @file
   This is an implementation of the AcpiVariable platform field for ECP platform.
 
-Copyright (c) 2006 - 2016, Intel Corporation. All rights reserved.<BR>
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
 
-This program and the accompanying materials
-are licensed and made available under the terms and conditions
-of the BSD License which accompanies this distribution.  The
-full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 ==
 
@@ -25,8 +18,8 @@ typedef struct {
   ACPI_CPU_DATA_COMPATIBILITY         AcpiCpuData;
   EFI_PHYSICAL_ADDRESS  VideoOpromAddress;
   UINT32                VideoOpromSize;
-  EFI_PHYSICAL_ADDRESS  S3DebugBufferAddress; 
-  EFI_PHYSICAL_ADDRESS  S3ResumeNvsEntryPoint;    
+  EFI_PHYSICAL_ADDRESS  S3DebugBufferAddress;
+  EFI_PHYSICAL_ADDRESS  S3ResumeNvsEntryPoint;
 } ACPI_VARIABLE_SET_COMPATIBILITY;
 
 **/
@@ -54,7 +47,7 @@ ACPI_VARIABLE_SET_COMPATIBILITY               *mAcpiVariableSetCompatibility = N
 
   @param  MemoryType   Memory type of memory to allocate.
   @param  Size         Size of memory to allocate.
-  
+
   @return Allocated address for output.
 
 **/
@@ -167,8 +160,8 @@ InstallAcpiS3SaveThunk (
                   );
   if (!EFI_ERROR (Status)) {
     //
-    // On ECP platform, if framework CPU drivers are in use, The compatible version of ACPI variable set 
-    // should be produced by CPU driver. 
+    // On ECP platform, if framework CPU drivers are in use, The compatible version of ACPI variable set
+    // should be produced by CPU driver.
     //
     VarSize = sizeof (mAcpiVariableSetCompatibility);
     Status = gRT->GetVariable (
@@ -184,7 +177,7 @@ InstallAcpiS3SaveThunk (
     }
   } else {
     //
-    // Allocate/initialize the compatible version of Acpi Variable Set since Framework chipset/platform 
+    // Allocate/initialize the compatible version of Acpi Variable Set since Framework chipset/platform
     // driver need this variable. ACPI_GLOBAL_VARIABLE variable is not used in runtime phase,
     // so RT attribute is not needed for it.
     //

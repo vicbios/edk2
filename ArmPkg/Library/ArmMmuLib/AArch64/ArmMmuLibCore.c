@@ -5,13 +5,7 @@
 *  Copyright (c) 2016, Linaro Limited. All rights reserved.
 *  Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
 *
-*  This program and the accompanying materials
-*  are licensed and made available under the terms and conditions of the BSD License
-*  which accompanies this distribution.  The full text of the license may be found at
-*  http://opensource.org/licenses/bsd-license.php
-*
-*  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-*  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+*  SPDX-License-Identifier: BSD-2-Clause-Patent
 *
 **/
 
@@ -35,6 +29,10 @@ ArmMemoryAttributeToPageAttribute (
   )
 {
   switch (Attributes) {
+  case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK_NONSHAREABLE:
+  case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK_NONSHAREABLE:
+    return TT_ATTR_INDX_MEMORY_WRITE_BACK;
+
   case ARM_MEMORY_REGION_ATTRIBUTE_WRITE_BACK:
   case ARM_MEMORY_REGION_ATTRIBUTE_NONSECURE_WRITE_BACK:
     return TT_ATTR_INDX_MEMORY_WRITE_BACK | TT_SH_INNER_SHAREABLE;
@@ -125,13 +123,14 @@ STATIC
 VOID
 ReplaceLiveEntry (
   IN  UINT64  *Entry,
-  IN  UINT64  Value
+  IN  UINT64  Value,
+  IN  UINT64  RegionStart
   )
 {
   if (!ArmMmuEnabled ()) {
     *Entry = Value;
   } else {
-    ArmReplaceLiveTranslationEntry (Entry, Value);
+    ArmReplaceLiveTranslationEntry (Entry, Value, RegionStart);
   }
 }
 
@@ -292,7 +291,8 @@ GetBlockEntryListFromAddress (
 
         // Fill the BlockEntry with the new TranslationTable
         ReplaceLiveEntry (BlockEntry,
-          ((UINTN)TranslationTable & TT_ADDRESS_MASK_DESCRIPTION_TABLE) | TableAttributes | TT_TYPE_TABLE_ENTRY);
+          (UINTN)TranslationTable | TableAttributes | TT_TYPE_TABLE_ENTRY,
+          RegionStart);
       }
     } else {
       if (IndexLevel != PageLevel) {
@@ -371,6 +371,8 @@ UpdateRegionMapping (
       *BlockEntry &= BlockEntryMask;
       *BlockEntry |= (RegionStart & TT_ADDRESS_MASK_BLOCK_ENTRY) | Attributes | Type;
 
+      ArmUpdateTranslationTableEntry (BlockEntry, (VOID *)RegionStart);
+
       // Go to the next BlockEntry
       RegionStart += BlockEntrySize;
       RegionLength -= BlockEntrySize;
@@ -378,7 +380,7 @@ UpdateRegionMapping (
 
       // Break the inner loop when next block is a table
       // Rerun GetBlockEntryListFromAddress to avoid page table memory leak
-      if (TableLevel != 3 &&
+      if (TableLevel != 3 && BlockEntry <= LastBlockEntry &&
           (*BlockEntry & TT_TYPE_MASK) == TT_TYPE_TABLE_ENTRY) {
             break;
       }
@@ -483,9 +485,6 @@ ArmSetMemoryAttributes (
     return Status;
   }
 
-  // Invalidate all TLB entries so changes are synced
-  ArmInvalidateTlb ();
-
   return EFI_SUCCESS;
 }
 
@@ -507,9 +506,6 @@ SetMemoryRegionAttribute (
   if (EFI_ERROR (Status)) {
     return Status;
   }
-
-  // Invalidate all TLB entries so changes are synced
-  ArmInvalidateTlb ();
 
   return EFI_SUCCESS;
 }
@@ -600,8 +596,15 @@ ArmConfigureMmu (
     return EFI_INVALID_PARAMETER;
   }
 
-  // Cover the entire GCD memory space
-  MaxAddress = (1UL << PcdGet8 (PcdPrePiCpuMemorySize)) - 1;
+  //
+  // Limit the virtual address space to what we can actually use: UEFI
+  // mandates a 1:1 mapping, so no point in making the virtual address
+  // space larger than the physical address space. We also have to take
+  // into account the architectural limitations that result from UEFI's
+  // use of 4 KB pages.
+  //
+  MaxAddress = MIN (LShiftU64 (1ULL, ArmGetPhysicalAddressBits ()) - 1,
+                    MAX_ALLOC_ADDRESS);
 
   // Lookup the Table Level to get the information
   LookupAddresstoRootTable (MaxAddress, &T0SZ, &RootTableEntryCount);

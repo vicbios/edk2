@@ -4,13 +4,7 @@
   Copyright (c) 2006 - 2016, Intel Corporation. All rights reserved.<BR>
   Copyright (c) 2011, Andrei Warkentin <andreiw@motorola.com>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -180,24 +174,23 @@ MemMapInitialization (
   AddIoMemoryRangeHob (0x0A0000, BASE_1MB);
 
   if (!mXen) {
-    UINT32  TopOfLowRam;
     UINT64  PciExBarBase;
     UINT32  PciBase;
     UINT32  PciSize;
 
-    TopOfLowRam = GetSystemMemorySizeBelow4gb ();
     PciExBarBase = 0;
+    PciBase = (mQemuUc32Base < BASE_2GB) ? BASE_2GB : mQemuUc32Base;
     if (mHostBridgeDevId == INTEL_Q35_MCH_DEVICE_ID) {
       //
-      // The MMCONFIG area is expected to fall between the top of low RAM and
-      // the base of the 32-bit PCI host aperture.
+      // The 32-bit PCI host aperture is expected to fall between the top of
+      // low RAM and the base of the MMCONFIG area.
       //
       PciExBarBase = FixedPcdGet64 (PcdPciExpressBaseAddress);
-      ASSERT (TopOfLowRam <= PciExBarBase);
+      ASSERT (PciBase < PciExBarBase);
       ASSERT (PciExBarBase <= MAX_UINT32 - SIZE_256MB);
-      PciBase = (UINT32)(PciExBarBase + SIZE_256MB);
+      PciSize = (UINT32)(PciExBarBase - PciBase);
     } else {
-      PciBase = (TopOfLowRam < BASE_2GB) ? BASE_2GB : TopOfLowRam;
+      PciSize = 0xFC000000 - PciBase;
     }
 
     //
@@ -213,7 +206,6 @@ MemMapInitialization (
     // 0xFED20000    gap                          896 KB
     // 0xFEE00000    LAPIC                          1 MB
     //
-    PciSize = 0xFC000000 - PciBase;
     AddIoMemoryBaseSizeHob (PciBase, PciSize);
     PcdStatus = PcdSet64S (PcdPciMmio32Base, PciBase);
     ASSERT_RETURN_ERROR (PcdStatus);
@@ -513,9 +505,8 @@ ReserveEmuVariableNvStore (
   //
   VariableStore =
     (EFI_PHYSICAL_ADDRESS)(UINTN)
-      AllocateAlignedRuntimePages (
-        EFI_SIZE_TO_PAGES (2 * PcdGet32 (PcdFlashNvStorageFtwSpareSize)),
-        PcdGet32 (PcdFlashNvStorageFtwSpareSize)
+      AllocateRuntimePages (
+        EFI_SIZE_TO_PAGES (2 * PcdGet32 (PcdFlashNvStorageFtwSpareSize))
         );
   DEBUG ((EFI_D_INFO,
           "Reserved variable store memory: 0x%lX; size: %dkb\n",
@@ -628,7 +619,7 @@ InitializePlatform (
 {
   EFI_STATUS    Status;
 
-  DEBUG ((EFI_D_ERROR, "Platform PEIM Loaded\n"));
+  DEBUG ((DEBUG_INFO, "Platform PEIM Loaded\n"));
 
   DebugDumpCmos ();
 
@@ -646,6 +637,15 @@ InitializePlatform (
   AddressWidthInitialization ();
   MaxCpuCountInitialization ();
 
+  //
+  // Query Host Bridge DID
+  //
+  mHostBridgeDevId = PciRead16 (OVMF_HOSTBRIDGE_DID);
+
+  if (FeaturePcdGet (PcdSmmSmramRequire)) {
+    Q35TsegMbytesInitialization ();
+  }
+
   PublishPeiMemory ();
 
   InitializeRamRegions ();
@@ -655,18 +655,17 @@ InitializePlatform (
     InitializeXen ();
   }
 
-  //
-  // Query Host Bridge DID
-  //
-  mHostBridgeDevId = PciRead16 (OVMF_HOSTBRIDGE_DID);
-
   if (mBootMode != BOOT_ON_S3_RESUME) {
-    ReserveEmuVariableNvStore ();
+    if (!FeaturePcdGet (PcdSmmSmramRequire)) {
+      ReserveEmuVariableNvStore ();
+    }
     PeiFvInitialization ();
     MemMapInitialization ();
     NoexecDxeInitialization ();
   }
 
+  InstallClearCacheCallback ();
+  AmdSevInitialize ();
   MiscInitialization ();
   InstallFeatureControlCallback ();
 

@@ -1,14 +1,8 @@
 /** @file
   Internal include file for VGA Mini Port Driver.
 
-Copyright (c) 2006 - 2011, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -252,14 +246,14 @@ PciVgaMiniPortComponentNameGetControllerName (
   This function implements EFI_VGA_MINI_PORT_PROTOCOL.SetMode().
   If ModeNumber exceeds the valid range, then EFI_UNSUPPORTED is returned.
   Otherwise, EFI_SUCCESS is directly returned without real operation.
-  
+
   @param This                 Protocol instance pointer.
   @param ModeNumber           Mode number.  0 - 80x25   1-80x50
 
   @retval EFI_SUCCESS         The mode was set
   @retval EFI_UNSUPPORTED     ModeNumber is not supported.
   @retval EFI_DEVICE_ERROR    The device is not functioning properly.
-  
+
 **/
 EFI_STATUS
 EFIAPI

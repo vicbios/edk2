@@ -3,13 +3,7 @@
   Architectures Software Developer's Manual.
 
   Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -105,25 +99,12 @@ CpuCommonFeaturesLibConstructor (
                );
     ASSERT_EFI_ERROR (Status);
   }
-  if (IsCpuFeatureSupported (CPU_FEATURE_SENTER)) {
-    Status = RegisterCpuFeature (
-               "SENTER",
-               FeatureControlGetConfigData,
-               VmxSupport,
-               SenterInitialize,
-               CPU_FEATURE_SENTER,
-               CPU_FEATURE_LOCK_FEATURE_CONTROL_REGISTER | CPU_FEATURE_BEFORE,
-               CPU_FEATURE_SMX | CPU_FEATURE_AFTER,
-               CPU_FEATURE_END
-               );
-    ASSERT_EFI_ERROR (Status);
-  }
   if (IsCpuFeatureSupported (CPU_FEATURE_SMX)) {
     Status = RegisterCpuFeature (
                "SMX",
                FeatureControlGetConfigData,
                SmxSupport,
-               VmxInsideSmxInitialize,
+               SmxInitialize,
                CPU_FEATURE_SMX,
                CPU_FEATURE_LOCK_FEATURE_CONTROL_REGISTER | CPU_FEATURE_BEFORE,
                CPU_FEATURE_END
@@ -134,8 +115,8 @@ CpuCommonFeaturesLibConstructor (
     Status = RegisterCpuFeature (
                "VMX",
                FeatureControlGetConfigData,
-               SmxSupport,
-               VmxOutsideSmxInitialize,
+               VmxSupport,
+               VmxInitialize,
                CPU_FEATURE_VMX,
                CPU_FEATURE_LOCK_FEATURE_CONTROL_REGISTER | CPU_FEATURE_BEFORE,
                CPU_FEATURE_END
@@ -211,10 +192,44 @@ CpuCommonFeaturesLibConstructor (
   if (IsCpuFeatureSupported (CPU_FEATURE_X2APIC)) {
     Status = RegisterCpuFeature (
                "X2Apic",
-               NULL,
+               X2ApicGetConfigData,
                X2ApicSupport,
                X2ApicInitialize,
                CPU_FEATURE_X2APIC,
+               CPU_FEATURE_END
+               );
+    ASSERT_EFI_ERROR (Status);
+  }
+  if (IsCpuFeatureSupported (CPU_FEATURE_PPIN)) {
+    Status = RegisterCpuFeature (
+               "PPIN",
+               NULL,
+               PpinSupport,
+               PpinInitialize,
+               CPU_FEATURE_PPIN,
+               CPU_FEATURE_END
+               );
+    ASSERT_EFI_ERROR (Status);
+  }
+  if (IsCpuFeatureSupported (CPU_FEATURE_LMCE)) {
+    Status = RegisterCpuFeature (
+               "LMCE",
+               NULL,
+               LmceSupport,
+               LmceInitialize,
+               CPU_FEATURE_LMCE,
+               CPU_FEATURE_LOCK_FEATURE_CONTROL_REGISTER | CPU_FEATURE_BEFORE,
+               CPU_FEATURE_END
+               );
+    ASSERT_EFI_ERROR (Status);
+  }
+  if (IsCpuFeatureSupported (CPU_FEATURE_PROC_TRACE)) {
+    Status = RegisterCpuFeature (
+               "Proc Trace",
+               ProcTraceGetConfigData,
+               ProcTraceSupport,
+               ProcTraceInitialize,
+               CPU_FEATURE_PROC_TRACE,
                CPU_FEATURE_END
                );
     ASSERT_EFI_ERROR (Status);

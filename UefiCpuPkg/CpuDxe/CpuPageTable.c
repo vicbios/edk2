@@ -4,26 +4,30 @@
   Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
   Copyright (c) 2017, AMD Incorporated. All rights reserved.<BR>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
 #include <Base.h>
 #include <Uefi.h>
-#include <Library/BaseLib.h>
-#include <Library/CpuLib.h>
-#include <Library/BaseMemoryLib.h>
-#include <Library/MemoryAllocationLib.h>
-#include <Library/DebugLib.h>
-#include <Library/UefiBootServicesTableLib.h>
-#include <Protocol/MpService.h>
+#include <Library/PeCoffGetEntryPointLib.h>
+#include <Library/SerialPortLib.h>
+#include <Library/SynchronizationLib.h>
+#include <Library/PrintLib.h>
+#include <Protocol/SmmBase2.h>
+#include <Register/Cpuid.h>
+#include <Register/Msr.h>
+
+#include "CpuDxe.h"
 #include "CpuPageTable.h"
+
+///
+/// Paging registers
+///
+#define CR0_WP                      BIT16
+#define CR0_PG                      BIT31
+#define CR4_PSE                     BIT4
+#define CR4_PAE                     BIT5
 
 ///
 /// Page Table Entry
@@ -60,6 +64,10 @@
 #define PAGING_2M_ADDRESS_MASK_64 0x000FFFFFFFE00000ull
 #define PAGING_1G_ADDRESS_MASK_64 0x000FFFFFC0000000ull
 
+#define MAX_PF_ENTRY_COUNT        10
+#define MAX_DEBUG_MESSAGE_LENGTH  0x100
+#define IA32_PF_EC_ID             BIT4
+
 typedef enum {
   PageNone,
   Page4K,
@@ -85,68 +93,59 @@ PAGE_ATTRIBUTE_TABLE mPageAttributeTable[] = {
   {Page1G,  SIZE_1GB, PAGING_1G_ADDRESS_MASK_64},
 };
 
-/**
-  Enable write protection function for AP.
+PAGE_TABLE_POOL                   *mPageTablePool = NULL;
+BOOLEAN                           mPageTablePoolLock = FALSE;
+PAGE_TABLE_LIB_PAGING_CONTEXT     mPagingContext;
+EFI_SMM_BASE2_PROTOCOL            *mSmmBase2 = NULL;
 
-  @param[in,out] Buffer  The pointer to private data buffer.
-**/
-VOID
-EFIAPI
-SyncCpuEnableWriteProtection (
-  IN OUT VOID *Buffer
-  )
-{
-  AsmWriteCr0 (AsmReadCr0 () | BIT16);
-}
+//
+// Record the page fault exception count for one instruction execution.
+//
+UINTN                     *mPFEntryCount;
+UINT64                    *(*mLastPFEntryPointer)[MAX_PF_ENTRY_COUNT];
 
 /**
-  CpuFlushTlb function for AP.
+ Check if current execution environment is in SMM mode or not, via
+ EFI_SMM_BASE2_PROTOCOL.
 
-  @param[in,out] Buffer  The pointer to private data buffer.
+ This is necessary because of the fact that MdePkg\Library\SmmMemoryAllocationLib
+ supports to free memory outside SMRAM. The library will call gBS->FreePool() or
+ gBS->FreePages() and then SetMemorySpaceAttributes interface in turn to change
+ memory paging attributes during free operation, if some memory related features
+ are enabled (like Heap Guard).
+
+ This means that SetMemorySpaceAttributes() has chance to run in SMM mode. This
+ will cause incorrect result because SMM mode always loads its own page tables,
+ which are usually different from DXE. This function can be used to detect such
+ situation and help to avoid further misoperations.
+
+  @retval TRUE    In SMM mode.
+  @retval FALSE   Not in SMM mode.
 **/
-VOID
-EFIAPI
-SyncCpuFlushTlb (
-  IN OUT VOID *Buffer
+BOOLEAN
+IsInSmm (
+  VOID
   )
 {
-  CpuFlushTlb();
-}
+  BOOLEAN                 InSmm;
 
-/**
-  Sync memory page attributes for AP.
-
-  @param[in] Procedure            A pointer to the function to be run on enabled APs of
-                                  the system.
-**/
-VOID
-SyncMemoryPageAttributesAp (
-  IN EFI_AP_PROCEDURE            Procedure
-  )
-{
-  EFI_STATUS                Status;
-  EFI_MP_SERVICES_PROTOCOL  *MpService;
-
-  Status = gBS->LocateProtocol (
-                  &gEfiMpServiceProtocolGuid,
-                  NULL,
-                  (VOID **)&MpService
-                  );
-  //
-  // Synchronize the update with all APs
-  //
-  if (!EFI_ERROR (Status)) {
-    Status = MpService->StartupAllAPs (
-                          MpService,          // This
-                          Procedure,          // Procedure
-                          FALSE,              // SingleThread
-                          NULL,               // WaitEvent
-                          0,                  // TimeoutInMicrosecsond
-                          NULL,               // ProcedureArgument
-                          NULL                // FailedCpuList
-                          );
-    ASSERT (Status == EFI_SUCCESS || Status == EFI_NOT_STARTED || Status == EFI_NOT_READY);
+  InSmm = FALSE;
+  if (mSmmBase2 == NULL) {
+    gBS->LocateProtocol (&gEfiSmmBase2ProtocolGuid, NULL, (VOID **)&mSmmBase2);
   }
+
+  if (mSmmBase2 != NULL) {
+    mSmmBase2->InSmm (mSmmBase2, &InSmm);
+  }
+
+  //
+  // mSmmBase2->InSmm() can only detect if the caller is running in SMRAM
+  // or from SMM driver. It cannot tell if the caller is running in SMM mode.
+  // Check page table base address to guarantee that because SMM mode willl
+  // load its own page table.
+  //
+  return (InSmm &&
+          mPagingContext.ContextData.X64.PageTableBase != (UINT64)AsmReadCr3());
 }
 
 /**
@@ -159,49 +158,60 @@ GetCurrentPagingContext (
   IN OUT PAGE_TABLE_LIB_PAGING_CONTEXT     *PagingContext
   )
 {
-  UINT32                         RegEax;
-  UINT32                         RegEdx;
+  UINT32                          RegEax;
+  CPUID_EXTENDED_CPU_SIG_EDX      RegEdx;
+  MSR_IA32_EFER_REGISTER          MsrEfer;
 
-  ZeroMem(PagingContext, sizeof(*PagingContext));
-  if (sizeof(UINTN) == sizeof(UINT64)) {
-    PagingContext->MachineType = IMAGE_FILE_MACHINE_X64;
-  } else {
-    PagingContext->MachineType = IMAGE_FILE_MACHINE_I386;
-  }
-  if ((AsmReadCr0 () & BIT31) != 0) {
-    PagingContext->ContextData.X64.PageTableBase = (AsmReadCr3 () & PAGING_4K_ADDRESS_MASK_64);
-    if ((AsmReadCr0 () & BIT16) == 0) {
-      AsmWriteCr0 (AsmReadCr0 () | BIT16);
-      SyncMemoryPageAttributesAp (SyncCpuEnableWriteProtection);
+  //
+  // Don't retrieve current paging context from processor if in SMM mode.
+  //
+  if (!IsInSmm ()) {
+    ZeroMem (&mPagingContext, sizeof(mPagingContext));
+    if (sizeof(UINTN) == sizeof(UINT64)) {
+      mPagingContext.MachineType = IMAGE_FILE_MACHINE_X64;
+    } else {
+      mPagingContext.MachineType = IMAGE_FILE_MACHINE_I386;
     }
-  } else {
-    PagingContext->ContextData.X64.PageTableBase = 0;
-  }
+    if ((AsmReadCr0 () & CR0_PG) != 0) {
+      mPagingContext.ContextData.X64.PageTableBase = (AsmReadCr3 () & PAGING_4K_ADDRESS_MASK_64);
+    } else {
+      mPagingContext.ContextData.X64.PageTableBase = 0;
+    }
 
-  if ((AsmReadCr4 () & BIT4) != 0) {
-    PagingContext->ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PSE;
-  }
-  if ((AsmReadCr4 () & BIT5) != 0) {
-    PagingContext->ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PAE;
-  }
-  if ((AsmReadCr0 () & BIT16) != 0) {
-    PagingContext->ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_WP_ENABLE;
-  }
+    if ((AsmReadCr4 () & CR4_PSE) != 0) {
+      mPagingContext.ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PSE;
+    }
+    if ((AsmReadCr4 () & CR4_PAE) != 0) {
+      mPagingContext.ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PAE;
+    }
+    if ((AsmReadCr0 () & CR0_WP) != 0) {
+      mPagingContext.ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_WP_ENABLE;
+    }
 
-  AsmCpuid (0x80000000, &RegEax, NULL, NULL, NULL);
-  if (RegEax > 0x80000000) {
-    AsmCpuid (0x80000001, NULL, NULL, NULL, &RegEdx);
-    if ((RegEdx & BIT20) != 0) {
-      // XD supported
-      if ((AsmReadMsr64 (0xC0000080) & BIT11) != 0) {
-        // XD activated
-        PagingContext->ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_XD_ACTIVATED;
+    AsmCpuid (CPUID_EXTENDED_FUNCTION, &RegEax, NULL, NULL, NULL);
+    if (RegEax >= CPUID_EXTENDED_CPU_SIG) {
+      AsmCpuid (CPUID_EXTENDED_CPU_SIG, NULL, NULL, NULL, &RegEdx.Uint32);
+
+      if (RegEdx.Bits.NX != 0) {
+        // XD supported
+        MsrEfer.Uint64 = AsmReadMsr64(MSR_CORE_IA32_EFER);
+        if (MsrEfer.Bits.NXE != 0) {
+          // XD activated
+          mPagingContext.ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_XD_ACTIVATED;
+        }
+      }
+
+      if (RegEdx.Bits.Page1GB != 0) {
+        mPagingContext.ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PAGE_1G_SUPPORT;
       }
     }
-    if ((RegEdx & BIT26) != 0) {
-      PagingContext->ContextData.Ia32.Attributes |= PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PAGE_1G_SUPPORT;
-    }
   }
+
+  //
+  // This can avoid getting SMM paging context if in SMM mode. We cannot assume
+  // SMM mode shares the same paging context as DXE.
+  //
+  CopyMem (PagingContext, &mPagingContext, sizeof (mPagingContext));
 }
 
 /**
@@ -440,8 +450,8 @@ ConvertPageEntryAttribute (
   *PageEntry = NewPageEntry;
   if (CurrentPageEntry != NewPageEntry) {
     *IsModified = TRUE;
-    DEBUG ((DEBUG_INFO, "ConvertPageEntryAttribute 0x%lx", CurrentPageEntry));
-    DEBUG ((DEBUG_INFO, "->0x%lx\n", NewPageEntry));
+    DEBUG ((DEBUG_VERBOSE, "ConvertPageEntryAttribute 0x%lx", CurrentPageEntry));
+    DEBUG ((DEBUG_VERBOSE, "->0x%lx\n", NewPageEntry));
   } else {
     *IsModified = FALSE;
   }
@@ -520,7 +530,7 @@ SplitPage (
     ASSERT (SplitAttribute == Page4K);
     if (SplitAttribute == Page4K) {
       NewPageEntry = AllocatePagesFunc (1);
-      DEBUG ((DEBUG_INFO, "Split - 0x%x\n", NewPageEntry));
+      DEBUG ((DEBUG_VERBOSE, "Split - 0x%x\n", NewPageEntry));
       if (NewPageEntry == NULL) {
         return RETURN_OUT_OF_RESOURCES;
       }
@@ -528,7 +538,7 @@ SplitPage (
       for (Index = 0; Index < SIZE_4KB / sizeof(UINT64); Index++) {
         NewPageEntry[Index] = (BaseAddress + SIZE_4KB * Index) | AddressEncMask | ((*PageEntry) & PAGE_PROGATE_BITS);
       }
-      (*PageEntry) = (UINT64)(UINTN)NewPageEntry | AddressEncMask | ((*PageEntry) & PAGE_PROGATE_BITS);
+      (*PageEntry) = (UINT64)(UINTN)NewPageEntry | AddressEncMask | ((*PageEntry) & PAGE_ATTRIBUTE_BITS);
       return RETURN_SUCCESS;
     } else {
       return RETURN_UNSUPPORTED;
@@ -541,7 +551,7 @@ SplitPage (
     ASSERT (SplitAttribute == Page2M || SplitAttribute == Page4K);
     if ((SplitAttribute == Page2M || SplitAttribute == Page4K)) {
       NewPageEntry = AllocatePagesFunc (1);
-      DEBUG ((DEBUG_INFO, "Split - 0x%x\n", NewPageEntry));
+      DEBUG ((DEBUG_VERBOSE, "Split - 0x%x\n", NewPageEntry));
       if (NewPageEntry == NULL) {
         return RETURN_OUT_OF_RESOURCES;
       }
@@ -549,13 +559,69 @@ SplitPage (
       for (Index = 0; Index < SIZE_4KB / sizeof(UINT64); Index++) {
         NewPageEntry[Index] = (BaseAddress + SIZE_2MB * Index) | AddressEncMask | IA32_PG_PS | ((*PageEntry) & PAGE_PROGATE_BITS);
       }
-      (*PageEntry) = (UINT64)(UINTN)NewPageEntry | AddressEncMask | ((*PageEntry) & PAGE_PROGATE_BITS);
+      (*PageEntry) = (UINT64)(UINTN)NewPageEntry | AddressEncMask | ((*PageEntry) & PAGE_ATTRIBUTE_BITS);
       return RETURN_SUCCESS;
     } else {
       return RETURN_UNSUPPORTED;
     }
   } else {
     return RETURN_UNSUPPORTED;
+  }
+}
+
+/**
+ Check the WP status in CR0 register. This bit is used to lock or unlock write
+ access to pages marked as read-only.
+
+  @retval TRUE    Write protection is enabled.
+  @retval FALSE   Write protection is disabled.
+**/
+BOOLEAN
+IsReadOnlyPageWriteProtected (
+  VOID
+  )
+{
+  //
+  // To avoid unforseen consequences, don't touch paging settings in SMM mode
+  // in this driver.
+  //
+  if (!IsInSmm ()) {
+    return ((AsmReadCr0 () & CR0_WP) != 0);
+  }
+  return FALSE;
+}
+
+/**
+ Disable Write Protect on pages marked as read-only.
+**/
+VOID
+DisableReadOnlyPageWriteProtect (
+  VOID
+  )
+{
+  //
+  // To avoid unforseen consequences, don't touch paging settings in SMM mode
+  // in this driver.
+  //
+  if (!IsInSmm ()) {
+    AsmWriteCr0 (AsmReadCr0 () & ~CR0_WP);
+  }
+}
+
+/**
+ Enable Write Protect on pages marked as read-only.
+**/
+VOID
+EnableReadOnlyPageWriteProtect (
+  VOID
+  )
+{
+  //
+  // To avoid unforseen consequences, don't touch paging settings in SMM mode
+  // in this driver.
+  //
+  if (!IsInSmm ()) {
+    AsmWriteCr0 (AsmReadCr0 () | CR0_WP);
   }
 }
 
@@ -607,6 +673,7 @@ ConvertMemoryPageAttributes (
   PAGE_ATTRIBUTE                    SplitAttribute;
   RETURN_STATUS                     Status;
   BOOLEAN                           IsEntryModified;
+  BOOLEAN                           IsWpEnabled;
 
   if ((BaseAddress & (SIZE_4KB - 1)) != 0) {
     DEBUG ((DEBUG_ERROR, "BaseAddress(0x%lx) is not aligned!\n", BaseAddress));
@@ -634,15 +701,19 @@ ConvertMemoryPageAttributes (
   switch(CurrentPagingContext.MachineType) {
   case IMAGE_FILE_MACHINE_I386:
     if (CurrentPagingContext.ContextData.Ia32.PageTableBase == 0) {
-      DEBUG ((DEBUG_ERROR, "PageTable is 0!\n"));
       if (Attributes == 0) {
         return EFI_SUCCESS;
       } else {
+        DEBUG ((DEBUG_ERROR, "PageTable is 0!\n"));
         return EFI_UNSUPPORTED;
       }
     }
     if ((CurrentPagingContext.ContextData.Ia32.Attributes & PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PAE) == 0) {
       DEBUG ((DEBUG_ERROR, "Non-PAE Paging!\n"));
+      return EFI_UNSUPPORTED;
+    }
+    if ((BaseAddress + Length) > BASE_4GB) {
+      DEBUG ((DEBUG_ERROR, "Beyond 4GB memory in 32-bit mode!\n"));
       return EFI_UNSUPPORTED;
     }
     break;
@@ -663,14 +734,27 @@ ConvertMemoryPageAttributes (
   if (IsModified != NULL) {
     *IsModified = FALSE;
   }
+  if (AllocatePagesFunc == NULL) {
+    AllocatePagesFunc = AllocatePageTableMemory;
+  }
+
+  //
+  // Make sure that the page table is changeable.
+  //
+  IsWpEnabled = IsReadOnlyPageWriteProtected ();
+  if (IsWpEnabled) {
+    DisableReadOnlyPageWriteProtect ();
+  }
 
   //
   // Below logic is to check 2M/4K page to make sure we donot waist memory.
   //
+  Status = EFI_SUCCESS;
   while (Length != 0) {
     PageEntry = GetPageTableEntry (&CurrentPagingContext, BaseAddress, &PageAttribute);
     if (PageEntry == NULL) {
-      return RETURN_UNSUPPORTED;
+      Status = RETURN_UNSUPPORTED;
+      goto Done;
     }
     PageEntryLength = PageAttributeToLength (PageAttribute);
     SplitAttribute = NeedSplitPage (BaseAddress, Length, PageEntry, PageAttribute);
@@ -688,11 +772,13 @@ ConvertMemoryPageAttributes (
       Length -= PageEntryLength;
     } else {
       if (AllocatePagesFunc == NULL) {
-        return RETURN_UNSUPPORTED;
+        Status = RETURN_UNSUPPORTED;
+        goto Done;
       }
       Status = SplitPage (PageEntry, PageAttribute, SplitAttribute, AllocatePagesFunc);
       if (RETURN_ERROR (Status)) {
-        return RETURN_UNSUPPORTED;
+        Status = RETURN_UNSUPPORTED;
+        goto Done;
       }
       if (IsSplitted != NULL) {
         *IsSplitted = TRUE;
@@ -707,7 +793,14 @@ ConvertMemoryPageAttributes (
     }
   }
 
-  return RETURN_SUCCESS;
+Done:
+  //
+  // Restore page table write protection, if any.
+  //
+  if (IsWpEnabled) {
+    EnableReadOnlyPageWriteProtect ();
+  }
+  return Status;
 }
 
 /**
@@ -757,14 +850,462 @@ AssignMemoryPageAttributes (
   if (!EFI_ERROR(Status)) {
     if ((PagingContext == NULL) && IsModified) {
       //
-      // Flush TLB as last step
+      // Flush TLB as last step.
+      //
+      // Note: Since APs will always init CR3 register in HLT loop mode or do
+      // TLB flush in MWAIT loop mode, there's no need to flush TLB for them
+      // here.
       //
       CpuFlushTlb();
-      SyncMemoryPageAttributesAp (SyncCpuFlushTlb);
     }
   }
 
   return Status;
+}
+
+/**
+ Check if Execute Disable feature is enabled or not.
+**/
+BOOLEAN
+IsExecuteDisableEnabled (
+  VOID
+  )
+{
+  MSR_CORE_IA32_EFER_REGISTER    MsrEfer;
+
+  MsrEfer.Uint64 = AsmReadMsr64 (MSR_IA32_EFER);
+  return (MsrEfer.Bits.NXE == 1);
+}
+
+/**
+  Update GCD memory space attributes according to current page table setup.
+**/
+VOID
+RefreshGcdMemoryAttributesFromPaging (
+  VOID
+  )
+{
+  EFI_STATUS                          Status;
+  UINTN                               NumberOfDescriptors;
+  EFI_GCD_MEMORY_SPACE_DESCRIPTOR     *MemorySpaceMap;
+  PAGE_TABLE_LIB_PAGING_CONTEXT       PagingContext;
+  PAGE_ATTRIBUTE                      PageAttribute;
+  UINT64                              *PageEntry;
+  UINT64                              PageLength;
+  UINT64                              MemorySpaceLength;
+  UINT64                              Length;
+  UINT64                              BaseAddress;
+  UINT64                              PageStartAddress;
+  UINT64                              Attributes;
+  UINT64                              Capabilities;
+  UINT64                              NewAttributes;
+  UINTN                               Index;
+
+  //
+  // Assuming that memory space map returned is sorted already; otherwise sort
+  // them in the order of lowest address to highest address.
+  //
+  Status = gDS->GetMemorySpaceMap (&NumberOfDescriptors, &MemorySpaceMap);
+  ASSERT_EFI_ERROR (Status);
+
+  GetCurrentPagingContext (&PagingContext);
+
+  Attributes      = 0;
+  NewAttributes   = 0;
+  BaseAddress     = 0;
+  PageLength      = 0;
+
+  if (IsExecuteDisableEnabled ()) {
+    Capabilities = EFI_MEMORY_RO | EFI_MEMORY_RP | EFI_MEMORY_XP;
+  } else {
+    Capabilities = EFI_MEMORY_RO | EFI_MEMORY_RP;
+  }
+
+  for (Index = 0; Index < NumberOfDescriptors; Index++) {
+    if (MemorySpaceMap[Index].GcdMemoryType == EfiGcdMemoryTypeNonExistent) {
+      continue;
+    }
+
+    //
+    // Sync the actual paging related capabilities back to GCD service first.
+    // As a side effect (good one), this can also help to avoid unnecessary
+    // memory map entries due to the different capabilities of the same type
+    // memory, such as multiple RT_CODE and RT_DATA entries in memory map,
+    // which could cause boot failure of some old Linux distro (before v4.3).
+    //
+    Status = gDS->SetMemorySpaceCapabilities (
+                    MemorySpaceMap[Index].BaseAddress,
+                    MemorySpaceMap[Index].Length,
+                    MemorySpaceMap[Index].Capabilities | Capabilities
+                    );
+    if (EFI_ERROR (Status)) {
+      //
+      // If we cannot udpate the capabilities, we cannot update its
+      // attributes either. So just simply skip current block of memory.
+      //
+      DEBUG ((
+        DEBUG_WARN,
+        "Failed to update capability: [%lu] %016lx - %016lx (%016lx -> %016lx)\r\n",
+        (UINT64)Index, MemorySpaceMap[Index].BaseAddress,
+        MemorySpaceMap[Index].BaseAddress + MemorySpaceMap[Index].Length - 1,
+        MemorySpaceMap[Index].Capabilities,
+        MemorySpaceMap[Index].Capabilities | Capabilities
+        ));
+      continue;
+    }
+
+    if (MemorySpaceMap[Index].BaseAddress >= (BaseAddress + PageLength)) {
+      //
+      // Current memory space starts at a new page. Resetting PageLength will
+      // trigger a retrieval of page attributes at new address.
+      //
+      PageLength = 0;
+    } else {
+      //
+      // In case current memory space is not adjacent to last one
+      //
+      PageLength -= (MemorySpaceMap[Index].BaseAddress - BaseAddress);
+    }
+
+    //
+    // Sync actual page attributes to GCD
+    //
+    BaseAddress       = MemorySpaceMap[Index].BaseAddress;
+    MemorySpaceLength = MemorySpaceMap[Index].Length;
+    while (MemorySpaceLength > 0) {
+      if (PageLength == 0) {
+        PageEntry = GetPageTableEntry (&PagingContext, BaseAddress, &PageAttribute);
+        if (PageEntry == NULL) {
+          break;
+        }
+
+        //
+        // Note current memory space might start in the middle of a page
+        //
+        PageStartAddress  = (*PageEntry) & (UINT64)PageAttributeToMask(PageAttribute);
+        PageLength        = PageAttributeToLength (PageAttribute) - (BaseAddress - PageStartAddress);
+        Attributes        = GetAttributesFromPageEntry (PageEntry);
+      }
+
+      Length = MIN (PageLength, MemorySpaceLength);
+      if (Attributes != (MemorySpaceMap[Index].Attributes &
+                         EFI_MEMORY_PAGETYPE_MASK)) {
+        NewAttributes = (MemorySpaceMap[Index].Attributes &
+                         ~EFI_MEMORY_PAGETYPE_MASK) | Attributes;
+        Status = gDS->SetMemorySpaceAttributes (
+                        BaseAddress,
+                        Length,
+                        NewAttributes
+                        );
+        ASSERT_EFI_ERROR (Status);
+        DEBUG ((
+          DEBUG_VERBOSE,
+          "Updated memory space attribute: [%lu] %016lx - %016lx (%016lx -> %016lx)\r\n",
+          (UINT64)Index, BaseAddress, BaseAddress + Length - 1,
+          MemorySpaceMap[Index].Attributes,
+          NewAttributes
+          ));
+      }
+
+      PageLength        -= Length;
+      MemorySpaceLength -= Length;
+      BaseAddress       += Length;
+    }
+  }
+
+  FreePool (MemorySpaceMap);
+}
+
+/**
+  Initialize a buffer pool for page table use only.
+
+  To reduce the potential split operation on page table, the pages reserved for
+  page table should be allocated in the times of PAGE_TABLE_POOL_UNIT_PAGES and
+  at the boundary of PAGE_TABLE_POOL_ALIGNMENT. So the page pool is always
+  initialized with number of pages greater than or equal to the given PoolPages.
+
+  Once the pages in the pool are used up, this method should be called again to
+  reserve at least another PAGE_TABLE_POOL_UNIT_PAGES. Usually this won't happen
+  often in practice.
+
+  @param[in] PoolPages      The least page number of the pool to be created.
+
+  @retval TRUE    The pool is initialized successfully.
+  @retval FALSE   The memory is out of resource.
+**/
+BOOLEAN
+InitializePageTablePool (
+  IN  UINTN                           PoolPages
+  )
+{
+  VOID                      *Buffer;
+  BOOLEAN                   IsModified;
+
+  //
+  // Do not allow re-entrance.
+  //
+  if (mPageTablePoolLock) {
+    return FALSE;
+  }
+
+  mPageTablePoolLock = TRUE;
+  IsModified = FALSE;
+
+  //
+  // Always reserve at least PAGE_TABLE_POOL_UNIT_PAGES, including one page for
+  // header.
+  //
+  PoolPages += 1;   // Add one page for header.
+  PoolPages = ((PoolPages - 1) / PAGE_TABLE_POOL_UNIT_PAGES + 1) *
+              PAGE_TABLE_POOL_UNIT_PAGES;
+  Buffer = AllocateAlignedPages (PoolPages, PAGE_TABLE_POOL_ALIGNMENT);
+  if (Buffer == NULL) {
+    DEBUG ((DEBUG_ERROR, "ERROR: Out of aligned pages\r\n"));
+    goto Done;
+  }
+
+  DEBUG ((
+    DEBUG_INFO,
+    "Paging: added %lu pages to page table pool\r\n",
+    (UINT64)PoolPages
+    ));
+
+  //
+  // Link all pools into a list for easier track later.
+  //
+  if (mPageTablePool == NULL) {
+    mPageTablePool = Buffer;
+    mPageTablePool->NextPool = mPageTablePool;
+  } else {
+    ((PAGE_TABLE_POOL *)Buffer)->NextPool = mPageTablePool->NextPool;
+    mPageTablePool->NextPool = Buffer;
+    mPageTablePool = Buffer;
+  }
+
+  //
+  // Reserve one page for pool header.
+  //
+  mPageTablePool->FreePages  = PoolPages - 1;
+  mPageTablePool->Offset = EFI_PAGES_TO_SIZE (1);
+
+  //
+  // Mark the whole pool pages as read-only.
+  //
+  ConvertMemoryPageAttributes (
+    NULL,
+    (PHYSICAL_ADDRESS)(UINTN)Buffer,
+    EFI_PAGES_TO_SIZE (PoolPages),
+    EFI_MEMORY_RO,
+    PageActionSet,
+    AllocatePageTableMemory,
+    NULL,
+    &IsModified
+    );
+  ASSERT (IsModified == TRUE);
+
+Done:
+  mPageTablePoolLock = FALSE;
+  return IsModified;
+}
+
+/**
+  This API provides a way to allocate memory for page table.
+
+  This API can be called more than once to allocate memory for page tables.
+
+  Allocates the number of 4KB pages and returns a pointer to the allocated
+  buffer. The buffer returned is aligned on a 4KB boundary.
+
+  If Pages is 0, then NULL is returned.
+  If there is not enough memory remaining to satisfy the request, then NULL is
+  returned.
+
+  @param  Pages                 The number of 4 KB pages to allocate.
+
+  @return A pointer to the allocated buffer or NULL if allocation fails.
+
+**/
+VOID *
+EFIAPI
+AllocatePageTableMemory (
+  IN UINTN           Pages
+  )
+{
+  VOID                            *Buffer;
+
+  if (Pages == 0) {
+    return NULL;
+  }
+
+  //
+  // Renew the pool if necessary.
+  //
+  if (mPageTablePool == NULL ||
+      Pages > mPageTablePool->FreePages) {
+    if (!InitializePageTablePool (Pages)) {
+      return NULL;
+    }
+  }
+
+  Buffer = (UINT8 *)mPageTablePool + mPageTablePool->Offset;
+
+  mPageTablePool->Offset     += EFI_PAGES_TO_SIZE (Pages);
+  mPageTablePool->FreePages  -= Pages;
+
+  return Buffer;
+}
+
+/**
+  Special handler for #DB exception, which will restore the page attributes
+  (not-present). It should work with #PF handler which will set pages to
+  'present'.
+
+  @param ExceptionType  Exception type.
+  @param SystemContext  Pointer to EFI_SYSTEM_CONTEXT.
+
+**/
+VOID
+EFIAPI
+DebugExceptionHandler (
+  IN EFI_EXCEPTION_TYPE   ExceptionType,
+  IN EFI_SYSTEM_CONTEXT   SystemContext
+  )
+{
+  UINTN     CpuIndex;
+  UINTN     PFEntry;
+  BOOLEAN   IsWpEnabled;
+
+  MpInitLibWhoAmI (&CpuIndex);
+
+  //
+  // Clear last PF entries
+  //
+  IsWpEnabled = IsReadOnlyPageWriteProtected ();
+  if (IsWpEnabled) {
+    DisableReadOnlyPageWriteProtect ();
+  }
+
+  for (PFEntry = 0; PFEntry < mPFEntryCount[CpuIndex]; PFEntry++) {
+    if (mLastPFEntryPointer[CpuIndex][PFEntry] != NULL) {
+      *mLastPFEntryPointer[CpuIndex][PFEntry] &= ~(UINT64)IA32_PG_P;
+    }
+  }
+
+  if (IsWpEnabled) {
+    EnableReadOnlyPageWriteProtect ();
+  }
+
+  //
+  // Reset page fault exception count for next page fault.
+  //
+  mPFEntryCount[CpuIndex] = 0;
+
+  //
+  // Flush TLB
+  //
+  CpuFlushTlb ();
+
+  //
+  // Clear TF in EFLAGS
+  //
+  if (mPagingContext.MachineType == IMAGE_FILE_MACHINE_I386) {
+    SystemContext.SystemContextIa32->Eflags &= (UINT32)~BIT8;
+  } else {
+    SystemContext.SystemContextX64->Rflags &= (UINT64)~BIT8;
+  }
+}
+
+/**
+  Special handler for #PF exception, which will set the pages which caused
+  #PF to be 'present'. The attribute of those pages should be restored in
+  the subsequent #DB handler.
+
+  @param ExceptionType  Exception type.
+  @param SystemContext  Pointer to EFI_SYSTEM_CONTEXT.
+
+**/
+VOID
+EFIAPI
+PageFaultExceptionHandler (
+  IN EFI_EXCEPTION_TYPE   ExceptionType,
+  IN EFI_SYSTEM_CONTEXT   SystemContext
+  )
+{
+  EFI_STATUS                      Status;
+  UINT64                          PFAddress;
+  PAGE_TABLE_LIB_PAGING_CONTEXT   PagingContext;
+  PAGE_ATTRIBUTE                  PageAttribute;
+  UINT64                          Attributes;
+  UINT64                          *PageEntry;
+  UINTN                           Index;
+  UINTN                           CpuIndex;
+  UINTN                           PageNumber;
+  BOOLEAN                         NonStopMode;
+
+  PFAddress = AsmReadCr2 () & ~EFI_PAGE_MASK;
+  if (PFAddress < BASE_4KB) {
+    NonStopMode = NULL_DETECTION_NONSTOP_MODE ? TRUE : FALSE;
+  } else {
+    NonStopMode = HEAP_GUARD_NONSTOP_MODE ? TRUE : FALSE;
+  }
+
+  if (NonStopMode) {
+    MpInitLibWhoAmI (&CpuIndex);
+    GetCurrentPagingContext (&PagingContext);
+    //
+    // Memory operation cross page boundary, like "rep mov" instruction, will
+    // cause infinite loop between this and Debug Trap handler. We have to make
+    // sure that current page and the page followed are both in PRESENT state.
+    //
+    PageNumber = 2;
+    while (PageNumber > 0) {
+      PageEntry = GetPageTableEntry (&PagingContext, PFAddress, &PageAttribute);
+      ASSERT(PageEntry != NULL);
+
+      if (PageEntry != NULL) {
+        Attributes = GetAttributesFromPageEntry (PageEntry);
+        if ((Attributes & EFI_MEMORY_RP) != 0) {
+          Attributes &= ~EFI_MEMORY_RP;
+          Status = AssignMemoryPageAttributes (&PagingContext, PFAddress,
+                                               EFI_PAGE_SIZE, Attributes, NULL);
+          if (!EFI_ERROR(Status)) {
+            Index = mPFEntryCount[CpuIndex];
+            //
+            // Re-retrieve page entry because above calling might update page
+            // table due to table split.
+            //
+            PageEntry = GetPageTableEntry (&PagingContext, PFAddress, &PageAttribute);
+            mLastPFEntryPointer[CpuIndex][Index++] = PageEntry;
+            mPFEntryCount[CpuIndex] = Index;
+          }
+        }
+      }
+
+      PFAddress += EFI_PAGE_SIZE;
+      --PageNumber;
+    }
+  }
+
+  //
+  // Initialize the serial port before dumping.
+  //
+  SerialPortInitialize ();
+  //
+  // Display ExceptionType, CPU information and Image information
+  //
+  DumpCpuContext (ExceptionType, SystemContext);
+  if (NonStopMode) {
+    //
+    // Set TF in EFLAGS
+    //
+    if (mPagingContext.MachineType == IMAGE_FILE_MACHINE_I386) {
+      SystemContext.SystemContextIa32->Eflags |= (UINT32)BIT8;
+    } else {
+      SystemContext.SystemContextX64->Rflags |= (UINT64)BIT8;
+    }
+  } else {
+    CpuDeadLoop ();
+  }
 }
 
 /**
@@ -778,6 +1319,27 @@ InitializePageTableLib (
   PAGE_TABLE_LIB_PAGING_CONTEXT     CurrentPagingContext;
 
   GetCurrentPagingContext (&CurrentPagingContext);
+
+  //
+  // Reserve memory of page tables for future uses, if paging is enabled.
+  //
+  if (CurrentPagingContext.ContextData.X64.PageTableBase != 0 &&
+      (CurrentPagingContext.ContextData.Ia32.Attributes &
+       PAGE_TABLE_LIB_PAGING_CONTEXT_IA32_X64_ATTRIBUTES_PAE) != 0) {
+    DisableReadOnlyPageWriteProtect ();
+    InitializePageTablePool (1);
+    EnableReadOnlyPageWriteProtect ();
+  }
+
+  if (HEAP_GUARD_NONSTOP_MODE || NULL_DETECTION_NONSTOP_MODE) {
+    mPFEntryCount = (UINTN *)AllocateZeroPool (sizeof (UINTN) * mNumberOfProcessors);
+    ASSERT (mPFEntryCount != NULL);
+
+    mLastPFEntryPointer = (UINT64 *(*)[MAX_PF_ENTRY_COUNT])
+                          AllocateZeroPool (sizeof (mLastPFEntryPointer[0]) * mNumberOfProcessors);
+    ASSERT (mLastPFEntryPointer != NULL);
+  }
+
   DEBUG ((DEBUG_INFO, "CurrentPagingContext:\n", CurrentPagingContext.MachineType));
   DEBUG ((DEBUG_INFO, "  MachineType   - 0x%x\n", CurrentPagingContext.MachineType));
   DEBUG ((DEBUG_INFO, "  PageTableBase - 0x%x\n", CurrentPagingContext.ContextData.X64.PageTableBase));

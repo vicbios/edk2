@@ -2,15 +2,9 @@
   Implementation for EFI_SIMPLE_TEXT_INPUT_PROTOCOL protocol.
 
 (C) Copyright 2014 Hewlett-Packard Development Company, L.P.<BR>
-Copyright (c) 2006 - 2017, Intel Corporation. All rights reserved.<BR>
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
 Copyright (C) 2016 Silicon Graphics, Inc. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -41,13 +35,12 @@ ReadKeyStrokeWorker (
     return EFI_INVALID_PARAMETER;
   }
 
-  if (!EfiKeyFiFoRemoveOneKey (TerminalDevice, &KeyData->Key)) {
-    return EFI_NOT_READY;
-  }
-
   KeyData->KeyState.KeyShiftState  = 0;
   KeyData->KeyState.KeyToggleState = 0;
 
+  if (!EfiKeyFiFoRemoveOneKey (TerminalDevice, &KeyData->Key)) {
+    return EFI_NOT_READY;
+  }
 
   return EFI_SUCCESS;
 
@@ -310,11 +303,14 @@ TerminalConInSetState (
   Register a notification function for a particular keystroke for the input device.
 
   @param  This                     Protocol instance pointer.
-  @param  KeyData                  A pointer to a buffer that is filled in with the
-                                   keystroke information data for the key that was
-                                   pressed.
+  @param  KeyData                  A pointer to a buffer that is filled in with
+                                   the keystroke information for the key that was
+                                   pressed. If KeyData.Key, KeyData.KeyState.KeyToggleState
+                                   and KeyData.KeyState.KeyShiftState are 0, then any incomplete
+                                   keystroke will trigger a notification of the KeyNotificationFunction.
   @param  KeyNotificationFunction  Points to the function to be called when the key
-                                   sequence is typed specified by KeyData.
+                                   sequence is typed specified by KeyData. This notification function
+                                   should be called at <=TPL_CALLBACK.
   @param  NotifyHandle             Points to the unique handle assigned to the
                                    registered notification.
 
@@ -630,7 +626,7 @@ KeyNotifyProcessHandler (
   while (TRUE) {
     //
     // Enter critical section
-    //  
+    //
     OldTpl = gBS->RaiseTPL (TPL_NOTIFY);
     HasKey = EfiKeyFiFoForNotifyRemoveOneKey (TerminalDevice->EfiKeyFiFoForNotify, &Key);
     CopyMem (&KeyData.Key, &Key, sizeof (EFI_INPUT_KEY));
@@ -985,6 +981,7 @@ EfiKeyFiFoInsertOneKey (
       //
       EfiKeyFiFoForNotifyInsertOneKey (TerminalDevice->EfiKeyFiFoForNotify, Key);
       gBS->SignalEvent (TerminalDevice->KeyNotifyProcessEvent);
+      break;
     }
   }
   if (IsEfiKeyFiFoFull (TerminalDevice)) {
@@ -1126,7 +1123,7 @@ UnicodeFiFoInsertOneKey (
 
 /**
   Remove one pre-fetched key out of the Unicode FIFO buffer.
-  The caller should guarantee that Unicode FIFO buffer is not empty 
+  The caller should guarantee that Unicode FIFO buffer is not empty
   by IsUnicodeFiFoEmpty ().
 
   @param  TerminalDevice       Terminal driver private structure.
@@ -1198,31 +1195,6 @@ IsUnicodeFiFoFull (
   return FALSE;
 }
 
-/**
-  Count Unicode FIFO buffer.
-
-  @param  TerminalDevice       Terminal driver private structure
-
-  @return The count in bytes of Unicode FIFO.
-
-**/
-UINT8
-UnicodeFiFoGetKeyCount (
-  TERMINAL_DEV    *TerminalDevice
-  )
-{
-  UINT8 Tail;
-  UINT8 Head;
-
-  Tail  = TerminalDevice->UnicodeFiFo->Tail;
-  Head  = TerminalDevice->UnicodeFiFo->Head;
-
-  if (Tail >= Head) {
-    return (UINT8) (Tail - Head);
-  } else {
-    return (UINT8) (Tail + FIFO_MAX_NUMBER + 1 - Head);
-  }
-}
 
 /**
   Update the Unicode characters from a terminal input device into EFI Keys FIFO.
@@ -1302,10 +1274,10 @@ UnicodeToEfiKeyFlushState (
   There is one special input sequence that will force the system to reset.
   This is ESC R ESC r ESC R.
 
-  Note: current implementation support terminal types include: PC ANSI, VT100+/VTUTF8, VT100. 
+  Note: current implementation support terminal types include: PC ANSI, VT100+/VTUTF8, VT100.
         The table below is not same with UEFI Spec 2.3 Appendix B Table 201(not support ANSI X3.64 /
         DEC VT200-500 and extra support PC ANSI, VT100)since UEFI Table 201 is just an example.
-        
+
   Symbols used in table below
   ===========================
     ESC = 0x1B

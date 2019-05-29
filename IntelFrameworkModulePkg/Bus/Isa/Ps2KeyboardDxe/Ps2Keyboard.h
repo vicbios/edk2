@@ -1,14 +1,8 @@
 /** @file
   PS/2 keyboard driver header file
 
-Copyright (c) 2006 - 2016, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -299,18 +293,7 @@ InitKeyboard (
   IN BOOLEAN                     ExtendedVerification
   );
 
-/**
-  Disable the keyboard interface of the 8042 controller.
 
-  @param ConsoleIn   - the device instance
-
-  @return status of issuing disable command
-
-**/
-EFI_STATUS
-DisableKeyboard (
-  IN KEYBOARD_CONSOLE_IN_DEV *ConsoleIn
-  );
 
 /**
   Timer event handler: read a series of scancodes from 8042
@@ -494,9 +477,13 @@ KeyboardSetState (
 
     @param This                    - Protocol instance pointer.
     @param KeyData                 - A pointer to a buffer that is filled in with the keystroke
-                              information data for the key that was pressed.
+                                     information data for the key that was pressed. If KeyData.Key,
+                                     KeyData.KeyState.KeyToggleState and KeyData.KeyState.KeyShiftState
+                                     are 0, then any incomplete keystroke will trigger a notification of
+                                     the KeyNotificationFunction.
     @param KeyNotificationFunction - Points to the function to be called when the key
-                              sequence is typed specified by KeyData.
+                                     sequence is typed specified by KeyData. This notification function
+                                     should be called at <=TPL_CALLBACK.
     @param NotifyHandle            - Points to the unique handle assigned to the registered notification.
 
     @retval EFI_SUCCESS             - The notification function was registered successfully.
@@ -560,6 +547,18 @@ BOOLEAN
 IsKeyRegistered (
   IN EFI_KEY_DATA  *RegsiteredData,
   IN EFI_KEY_DATA  *InputData
+  );
+
+/**
+  Initialize the key state.
+
+  @param  ConsoleIn     The KEYBOARD_CONSOLE_IN_DEV instance.
+  @param  KeyState      A pointer to receive the key state information.
+**/
+VOID
+InitializeKeyState (
+  IN  KEYBOARD_CONSOLE_IN_DEV *ConsoleIn,
+  OUT EFI_KEY_STATE           *KeyState
   );
 
 #endif

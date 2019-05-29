@@ -1,14 +1,8 @@
 /** @file
   Utility routines used by boot maintenance modules.
 
-Copyright (c) 2004 - 2014, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -146,7 +140,7 @@ EfiLibGetVariable (
 
   @param VarName           A Null-terminated Unicode string that is
                            the name of the vendor's variable.
-                         
+
   @param VarGuid           A unique identifier for the vendor.
 
   @retval  EFI_SUCCESS           The variable was found and removed
@@ -323,45 +317,9 @@ EfiDevicePathInstanceCount (
   return Count;
 }
 
-/**
-  Adjusts the size of a previously allocated buffer.
-
-
-  @param OldPool         - A pointer to the buffer whose size is being adjusted.
-  @param OldSize         - The size of the current buffer.
-  @param NewSize         - The size of the new buffer.
-
-  @return   The newly allocated buffer.
-  @retval   NULL  Allocation failed.
-
-**/
-VOID *
-EfiReallocatePool (
-  IN VOID                 *OldPool,
-  IN UINTN                OldSize,
-  IN UINTN                NewSize
-  )
-{
-  VOID  *NewPool;
-
-  NewPool = NULL;
-  if (NewSize != 0) {
-    NewPool = AllocateZeroPool (NewSize);
-  }
-
-  if (OldPool != NULL) {
-    if (NewPool != NULL) {
-      CopyMem (NewPool, OldPool, OldSize < NewSize ? OldSize : NewSize);
-    }
-
-    FreePool (OldPool);
-  }
-
-  return NewPool;
-}
 
 /**
-  Get a string from the Data Hub record based on 
+  Get a string from the Data Hub record based on
   a device path.
 
   @param DevPath         The device Path.

@@ -2,13 +2,7 @@
   This driver module produces IDE_CONTROLLER_INIT protocol for Sata Controllers.
 
   Copyright (c) 2011, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -388,6 +382,7 @@ SataControllerStart (
   IN EFI_DEVICE_PATH_PROTOCOL       *RemainingDevicePath
   )
 {
+  UINTN                             BailLogMask;
   EFI_STATUS                        Status;
   EFI_PCI_IO_PROTOCOL               *PciIo;
   UINT64                            OriginalPciAttributes;
@@ -398,6 +393,7 @@ SataControllerStart (
 
   DEBUG ((EFI_D_INFO, "SataControllerStart START\n"));
 
+  BailLogMask = DEBUG_ERROR;
   SataPrivateData = NULL;
 
   //
@@ -412,6 +408,14 @@ SataControllerStart (
                   EFI_OPEN_PROTOCOL_BY_DRIVER
                   );
   if (EFI_ERROR (Status)) {
+    if (Status == EFI_ALREADY_STARTED) {
+      //
+      // This is an expected condition for OpenProtocol() / BY_DRIVER, in a
+      // DriverBindingStart() member function; degrade the log mask to
+      // DEBUG_INFO.
+      //
+      BailLogMask = DEBUG_INFO;
+    }
     goto Bail;
   }
 
@@ -542,7 +546,8 @@ ClosePciIo:
          );
 
 Bail:
-  DEBUG ((EFI_D_ERROR, "SataControllerStart error return status = %r\n", Status));
+  DEBUG ((BailLogMask, "SataControllerStart error return status = %r\n",
+    Status));
   return Status;
 }
 

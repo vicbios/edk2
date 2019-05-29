@@ -2,14 +2,8 @@
   Routines implements SIMPLE_TEXT_IN protocol's interfaces based on 8042 interfaces
   provided by Ps2KbdCtrller.c.
 
-Copyright (c) 2006 - 2016, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -165,6 +159,10 @@ KeyboardReadKeyStrokeWorker (
     Status = EFI_DEVICE_ERROR;
   } else {
     Status = PopEfikeyBufHead (&ConsoleInDev->EfiKeyQueue, KeyData);
+    if (Status == EFI_NOT_READY) {
+      ZeroMem (&KeyData->Key, sizeof (KeyData->Key));
+      InitializeKeyState (ConsoleInDev, &KeyData->KeyState);
+    }
   }
 
   gBS->RestoreTPL (OldTpl);
@@ -533,9 +531,12 @@ Exit:
 
     @param This                       Protocol instance pointer.
     @param KeyData                    A pointer to a buffer that is filled in with the keystroke
-                                      information data for the key that was pressed.
+                                      information data for the key that was pressed. If KeyData.Key,
+                                      KeyData.KeyState.KeyToggleState and KeyData.KeyState.KeyShiftState are 0,
+                                      then any incomplete keystroke will trigger a notification of the KeyNotificationFunction.
     @param KeyNotificationFunction    Points to the function to be called when the key
-                                      sequence is typed specified by KeyData.
+                                      sequence is typed specified by KeyData. This notification function
+                                      should be called at <=TPL_CALLBACK.
     @param NotifyHandle               Points to the unique handle assigned to the registered notification.
 
     @retval EFI_SUCCESS               The notification function was registered successfully.
@@ -711,7 +712,7 @@ KeyNotifyProcessHandler (
   while (TRUE) {
     //
     // Enter critical section
-    //  
+    //
     OldTpl = gBS->RaiseTPL (TPL_NOTIFY);
     Status = PopEfikeyBufHead (&ConsoleIn->EfiKeyQueueForNotify, &KeyData);
     //

@@ -1,15 +1,8 @@
 /** @file
 
-Copyright (c) 2006 - 2017, Intel Corporation. All rights reserved.<BR>
+Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
 
-This program and the accompanying materials
-are licensed and made available under the terms and conditions
-of the BSD License which accompanies this distribution.  The
-full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -41,7 +34,7 @@ BOOLEAN                             mIgnoreBbsUpdateFlag;
 BOOLEAN                             mVgaInstallationInProgress  = FALSE;
 UINT32                              mRomCount                   = 0x00;
 ROM_INSTANCE_ENTRY                  mRomEntry[ROM_MAX_ENTRIES];
-
+EDKII_IOMMU_PROTOCOL                *mIoMmu;
 
 /**
   Query shadowed legacy ROM parameters registered by RomShadow() previously.
@@ -150,7 +143,7 @@ EFI_STATUS
 RomShadow (
   IN  EFI_HANDLE                                  PciHandle,
   IN  UINT32                                      ShadowAddress,
-  IN  UINT32                                      ShadowedSize,  
+  IN  UINT32                                      ShadowedSize,
   IN  UINT8                                       DiskStart,
   IN  UINT8                                       DiskEnd
   )
@@ -258,7 +251,7 @@ IsLegacyRom (
 }
 
 /**
-  Find the PC-AT ROM Image in the raw PCI Option ROM. Also return the 
+  Find the PC-AT ROM Image in the raw PCI Option ROM. Also return the
   related information from the header.
 
   @param  Csm16Revision           The PCI interface version of underlying CSM16
@@ -321,7 +314,7 @@ GetPciLegacyRom (
     if (((UINTN)RomHeader.Raw - (UINTN)*Rom) + Pcir->ImageLength * 512 > *ImageSize) {
       break;
     }
-    
+
     if (Pcir->CodeType == PCI_CODE_TYPE_PCAT_IMAGE) {
       Match = FALSE;
       if (Pcir->VendorId == VendorId) {
@@ -384,7 +377,7 @@ GetPciLegacyRom (
         DEBUG ((EFI_D_ERROR, "GetPciLegacyRom - OpRom not match (%04x-%04x)\n", (UINTN)VendorId, (UINTN)DeviceId));
       }
     }
-    
+
     if ((Pcir->Indicator & 0x80) == 0x80) {
       break;
     } else {
@@ -415,7 +408,7 @@ GetPciLegacyRom (
   }
 
   if (OpRomRevision != NULL) {
-    // 
+    //
     // Optional return PCI Data Structure revision
     //
     if (Pcir->Length >= 0x1C) {
@@ -815,7 +808,7 @@ CopyPirqTable (
     //
     Regs.X.BX = (UINT16) 0x1;
     //
-    // 16-byte boundary alignment requirement according to 
+    // 16-byte boundary alignment requirement according to
     // PCI IRQ Routing Table Specification
     //
     Regs.X.DX = 0x10;
@@ -832,7 +825,7 @@ CopyPirqTable (
     if (Regs.X.AX != 0) {
       DEBUG ((EFI_D_ERROR, "PIRQ table length insufficient - %x\n", PirqTableSize));
     } else {
-      DEBUG ((EFI_D_INFO, "PIRQ table in legacy region - %x\n", Private->Legacy16Table->IrqRoutingTablePointer));   
+      DEBUG ((EFI_D_INFO, "PIRQ table in legacy region - %x\n", Private->Legacy16Table->IrqRoutingTablePointer));
       Private->Legacy16Table->IrqRoutingTableLength = (UINT32)PirqTableSize;
       CopyMem (
         (VOID *) (UINTN)Private->Legacy16Table->IrqRoutingTablePointer,
@@ -1595,11 +1588,11 @@ PciShadowRoms (
                                           &HandleBuffer,
                                           &HandleCount,
                                           NULL
-                                          ); 
+                                          );
   if (EFI_ERROR (Status)) {
     return EFI_UNSUPPORTED;
   }
-  
+
   VgaHandle = HandleBuffer[0];
 
   Status = gBS->LocateHandleBuffer (
@@ -1699,13 +1692,13 @@ PciShadowRoms (
                  sizeof (Pci) / sizeof (UINT32),
                  &Pci
                  );
-    
+
     //
-    // Only one Video OPROM can be given control in BIOS phase. If there are multiple Video devices, 
-    // one will work in legacy mode (OPROM will be given control) and 
+    // Only one Video OPROM can be given control in BIOS phase. If there are multiple Video devices,
+    // one will work in legacy mode (OPROM will be given control) and
     // other Video devices will work in native mode (OS driver will handle these devices).
-    // 
-    if (IS_PCI_DISPLAY (&Pci) && Index != 0) {    
+    //
+    if (IS_PCI_DISPLAY (&Pci) && Index != 0) {
       continue;
     }
     //
@@ -1715,11 +1708,11 @@ PciShadowRoms (
     if (!EFI_ERROR (Status)) {
       continue;
     }
-    
+
     //
     // If legacy VBIOS Oprom has not been dispatched before, install legacy VBIOS here.
     //
-    if (IS_PCI_DISPLAY (&Pci) && Index == 0) {    
+    if (IS_PCI_DISPLAY (&Pci) && Index == 0) {
       Status = LegacyBiosInstallVgaRom (Private);
       //
       // A return status of EFI_NOT_FOUND is considered valid (No EFI
@@ -2104,7 +2097,7 @@ LegacyBiosInstallVgaRom (
   if (EFI_ERROR (Status)) {
     return Status;
   }
-  
+
   for (Index = 0; Index < EntryCount; Index++) {
     if ((OpenInfoBuffer[Index].Attributes & EFI_OPEN_PROTOCOL_BY_DRIVER) != 0) {
       Status = gBS->HandleProtocol (
@@ -2123,7 +2116,7 @@ LegacyBiosInstallVgaRom (
       }
     }
   }
-  
+
   //
   // Kick off the native EFI driver
   //
@@ -2279,6 +2272,7 @@ LegacyBiosInstallRom (
   UINTN                 Function;
   EFI_IA32_REGISTER_SET Regs;
   UINT8                 VideoMode;
+  UINT8                 OldVideoMode;
   EFI_TIME              BootTime;
   UINT32                *BdaPtr;
   UINT32                LocalTime;
@@ -2299,11 +2293,12 @@ LegacyBiosInstallRom (
   Device          = 0;
   Function        = 0;
   VideoMode       = 0;
+  OldVideoMode    = 0;
   PhysicalAddress = 0;
   MaxRomAddr      = PcdGet32 (PcdEndOpromShadowAddress);
 
   if ((Private->Legacy16Table->TableLength >= OFFSET_OF(EFI_COMPATIBILITY16_TABLE, HiPermanentMemoryAddress)) &&
-      (Private->Legacy16Table->UmaAddress != 0) && 
+      (Private->Legacy16Table->UmaAddress != 0) &&
       (Private->Legacy16Table->UmaSize != 0) &&
       (MaxRomAddr > (Private->Legacy16Table->UmaAddress))) {
     MaxRomAddr = Private->Legacy16Table->UmaAddress;
@@ -2324,7 +2319,7 @@ LegacyBiosInstallRom (
                     EFI_SIZE_TO_PAGES (ImageSize),
                     &PhysicalAddress
                     );
-        
+
     if (EFI_ERROR (Status)) {
       DEBUG ((EFI_D_ERROR, "return LegacyBiosInstallRom(%d): EFI_OUT_OF_RESOURCES (no more space for OpROM)\n", __LINE__));
       //
@@ -2387,7 +2382,7 @@ LegacyBiosInstallRom (
                            (UINT32) ImageSize,
                            &Granularity
                            );
-    
+
   DEBUG ((EFI_D_INFO, " Shadowing OpROM init/runtime/isize = %x/%x/%x\n", InitAddress, RuntimeAddress, ImageSize));
 
   CopyMem ((VOID *) InitAddress, RomImage, ImageSize);
@@ -2401,31 +2396,34 @@ LegacyBiosInstallRom (
   // 2. BBS compliants drives will not change 40:75 until boot time.
   // 3. Onboard IDE controllers will change 40:75
   //
-  LocalDiskStart = (UINT8) ((*(UINT8 *) ((UINTN) 0x475)) + 0x80);
-  if ((Private->Disk4075 + 0x80) < LocalDiskStart) {
-    //
-    // Update table since onboard IDE drives found
-    //
-    Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciSegment        = 0xff;
-    Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciBus            = 0xff;
-    Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciDevice         = 0xff;
-    Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciFunction       = 0xff;
-    Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].StartDriveNumber  = (UINT8) (Private->Disk4075 + 0x80);
-    Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].EndDriveNumber    = LocalDiskStart;
-    Private->LegacyEfiHddTableIndex ++;
-    Private->Disk4075 = (UINT8) (LocalDiskStart & 0x7f);
-    Private->DiskEnd  = LocalDiskStart;
-  }
+  ACCESS_PAGE0_CODE (
+    LocalDiskStart = (UINT8) ((*(UINT8 *) ((UINTN) 0x475)) + 0x80);
+    if ((Private->Disk4075 + 0x80) < LocalDiskStart) {
+      //
+      // Update table since onboard IDE drives found
+      //
+      Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciSegment        = 0xff;
+      Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciBus            = 0xff;
+      Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciDevice         = 0xff;
+      Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].PciFunction       = 0xff;
+      Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].StartDriveNumber  = (UINT8) (Private->Disk4075 + 0x80);
+      Private->LegacyEfiHddTable[Private->LegacyEfiHddTableIndex].EndDriveNumber    = LocalDiskStart;
+      Private->LegacyEfiHddTableIndex ++;
+      Private->Disk4075 = (UINT8) (LocalDiskStart & 0x7f);
+      Private->DiskEnd  = LocalDiskStart;
+    }
 
-  if (PciHandle != mVgaHandle) {
+    if (PciHandle != mVgaHandle) {
 
-    EnablePs2Keyboard ();
+      EnablePs2Keyboard ();
 
-    //
-    // Store current mode settings since PrepareToScanRom may change mode.
-    //
-    VideoMode = *(UINT8 *) ((UINTN) (0x400 + BDA_VIDEO_MODE));
-  }
+      //
+      // Store current mode settings since PrepareToScanRom may change mode.
+      //
+      VideoMode = *(UINT8 *) ((UINTN) (0x400 + BDA_VIDEO_MODE));
+    }
+  );
+
   //
   // Notify the platform that we are about to scan the ROM
   //
@@ -2461,29 +2459,31 @@ LegacyBiosInstallRom (
   //
   gRT->GetTime (&BootTime, NULL);
   LocalTime = BootTime.Hour * 3600 + BootTime.Minute * 60 + BootTime.Second;
-  
+
   //
   // Multiply result by 18.2 for number of ticks since midnight.
   // Use 182/10 to avoid floating point math.
   //
-  LocalTime = (LocalTime * 182) / 10;
-  BdaPtr    = (UINT32 *) ((UINTN) 0x46C);
-  *BdaPtr   = LocalTime;
-  
+  ACCESS_PAGE0_CODE (
+    LocalTime = (LocalTime * 182) / 10;
+    BdaPtr    = (UINT32 *) ((UINTN) 0x46C);
+    *BdaPtr   = LocalTime;
+  );
+
   //
   // Pass in handoff data
   //
   PciEnableStatus = EFI_UNSUPPORTED;
   ZeroMem (&Regs, sizeof (Regs));
   if (PciHandle != NULL) {
-  
+
     Status = gBS->HandleProtocol (
                     PciHandle,
                     &gEfiPciIoProtocolGuid,
                     (VOID **) &PciIo
                     );
     ASSERT_EFI_ERROR (Status);
-  
+
     //
     // Enable command register.
     //
@@ -2493,7 +2493,7 @@ LegacyBiosInstallRom (
                                EFI_PCI_DEVICE_ENABLE,
                                NULL
                                );
-  
+
     PciIo->GetLocation (
              PciIo,
              &Segment,
@@ -2503,10 +2503,10 @@ LegacyBiosInstallRom (
              );
     DEBUG ((EFI_D_INFO, "Shadowing OpROM on the PCI device %x/%x/%x\n", Bus, Device, Function));
   }
-  
+
   mIgnoreBbsUpdateFlag  = FALSE;
   Regs.X.AX             = Legacy16DispatchOprom;
-  
+
   //
   // Generate DispatchOpRomTable data
   //
@@ -2538,7 +2538,7 @@ LegacyBiosInstallRom (
   } else {
     Regs.X.BX = 0;
   }
-  
+
   if (Private->IntThunk->DispatchOpromTable.NumberBbsEntries != (UINT8) Private->IntThunk->EfiToLegacy16BootTable.NumberBbsEntries) {
     Private->IntThunk->EfiToLegacy16BootTable.NumberBbsEntries  = (UINT8) Private->IntThunk->DispatchOpromTable.NumberBbsEntries;
     mIgnoreBbsUpdateFlag = TRUE;
@@ -2564,7 +2564,11 @@ LegacyBiosInstallRom (
     //
     // Set mode settings since PrepareToScanRom may change mode
     //
-    if (VideoMode != *(UINT8 *) ((UINTN) (0x400 + BDA_VIDEO_MODE))) {
+    ACCESS_PAGE0_CODE ({
+      OldVideoMode = *(UINT8 *) ((UINTN) (0x400 + BDA_VIDEO_MODE));
+    });
+
+    if (VideoMode != OldVideoMode) {
       //
       // The active video mode is changed, restore it to original mode.
       //
@@ -2604,8 +2608,10 @@ LegacyBiosInstallRom (
     }
   }
 
-  LocalDiskEnd = (UINT8) ((*(UINT8 *) ((UINTN) 0x475)) + 0x80);
-  
+  ACCESS_PAGE0_CODE (
+    LocalDiskEnd = (UINT8) ((*(UINT8 *) ((UINTN) 0x475)) + 0x80);
+  );
+
   //
   // Allow platform to perform any required actions after the
   // OPROM has been initialized.
@@ -2674,7 +2680,7 @@ LegacyBiosInstallRom (
   Private->OptionRom = (UINT32) (RuntimeAddress + *RuntimeImageLength);
 
   Status = EFI_SUCCESS;
-   
+
 Done:
   if (PhysicalAddress != 0) {
     //
@@ -2693,6 +2699,61 @@ Done:
                            &Granularity
                            );
 
+  return Status;
+}
+
+/**
+  Let IOMMU grant DMA access for the PCI device.
+
+  @param  PciHandle             The EFI handle for the PCI device.
+  @param  HostAddress           The system memory address to map to the PCI controller.
+  @param  NumberOfBytes         The number of bytes to map.
+
+  @retval EFI_SUCCESS  The DMA access is granted.
+**/
+EFI_STATUS
+IoMmuGrantAccess (
+  IN  EFI_HANDLE                        PciHandle,
+  IN  EFI_PHYSICAL_ADDRESS              HostAddress,
+  IN  UINTN                             NumberOfBytes
+  )
+{
+  EFI_PHYSICAL_ADDRESS            DeviceAddress;
+  VOID                            *Mapping;
+  EFI_STATUS                      Status;
+
+  if (PciHandle == NULL) {
+    return EFI_UNSUPPORTED;
+  }
+
+  Status = EFI_SUCCESS;
+  if (mIoMmu == NULL) {
+    gBS->LocateProtocol (&gEdkiiIoMmuProtocolGuid, NULL, (VOID **)&mIoMmu);
+  }
+  if (mIoMmu != NULL) {
+    Status = mIoMmu->Map (
+                       mIoMmu,
+                       EdkiiIoMmuOperationBusMasterCommonBuffer,
+                       (VOID *)(UINTN)HostAddress,
+                       &NumberOfBytes,
+                       &DeviceAddress,
+                       &Mapping
+                       );
+    if (EFI_ERROR(Status)) {
+      DEBUG ((DEBUG_ERROR, "LegacyPci - IoMmuMap - %r\n", Status));
+    } else {
+      ASSERT (DeviceAddress == HostAddress);
+      Status = mIoMmu->SetAttribute (
+                         mIoMmu,
+                         PciHandle,
+                         Mapping,
+                         EDKII_IOMMU_ACCESS_READ | EDKII_IOMMU_ACCESS_WRITE
+                         );
+      if (EFI_ERROR(Status)) {
+        DEBUG ((DEBUG_ERROR, "LegacyPci - IoMmuSetAttribute - %r\n", Status));
+      }
+    }
+  }
   return Status;
 }
 
@@ -2811,7 +2872,7 @@ LegacyBiosInstallPciRom (
   *Flags = 0;
   if ((PciHandle != NULL) && (RomImage == NULL)) {
     //
-    // If PciHandle has OpRom to Execute 
+    // If PciHandle has OpRom to Execute
     // and OpRom are all associated with Hardware
     //
     Status = gBS->HandleProtocol (
@@ -2957,7 +3018,7 @@ LegacyBiosInstallPciRom (
       mVgaInstallationInProgress = FALSE;
       return EFI_UNSUPPORTED;
     }
-    
+
     Pcir = (PCI_3_0_DATA_STRUCTURE *)
            ((UINT8 *) LocalRomImage + ((PCI_EXPANSION_ROM_HEADER *) LocalRomImage)->PcirOffset);
 
@@ -2978,6 +3039,21 @@ LegacyBiosInstallPciRom (
       RuntimeImageLength = Pcir->MaxRuntimeImageLength * 512;
     }
   }
+
+  //
+  // Grant access for below 1M
+  // BDA/EBDA/LowPMM and scratch memory for OPROM.
+  //
+  IoMmuGrantAccess (PciHandle, 0, SIZE_1MB);
+  //
+  // Grant access for HiPmm
+  //
+  IoMmuGrantAccess (
+    PciHandle,
+    Private->IntThunk->EfiToLegacy16InitTable.HiPmmMemory,
+    Private->IntThunk->EfiToLegacy16InitTable.HiPmmMemorySizeInBytes
+    );
+
   //
   // Shadow and initialize the OpROM.
   //

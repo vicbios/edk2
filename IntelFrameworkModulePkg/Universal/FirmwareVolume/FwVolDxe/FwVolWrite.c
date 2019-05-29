@@ -1,16 +1,9 @@
 /** @file
   Implements write firmware file.
 
-  Copyright (c) 2006 - 2015, Intel Corporation. All rights reserved.<BR>
+  Copyright (c) 2006 - 2018, Intel Corporation. All rights reserved.<BR>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions
-  of the BSD License which accompanies this distribution.  The
-  full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -202,9 +195,11 @@ FvFileAttrib2FfsFileAttrib (
 {
   UINT8 FvFileAlignment;
   UINT8 FfsFileAlignment;
+  UINT8 FfsFileAlignment2;
 
   FvFileAlignment   = (UINT8) (FvFileAttrib & EFI_FV_FILE_ATTRIB_ALIGNMENT);
   FfsFileAlignment  = 0;
+  FfsFileAlignment2 = 0;
 
   switch (FvFileAlignment) {
   case 0:
@@ -289,9 +284,42 @@ FvFileAttrib2FfsFileAttrib (
   case 16:
     FfsFileAlignment = 7;
     break;
+
+  case 17:
+    FfsFileAlignment = 0;
+    FfsFileAlignment2 = 1;
+    break;
+  case 18:
+    FfsFileAlignment = 1;
+    FfsFileAlignment2 = 1;
+    break;
+  case 19:
+    FfsFileAlignment = 2;
+    FfsFileAlignment2 = 1;
+    break;
+  case 20:
+    FfsFileAlignment = 3;
+    FfsFileAlignment2 = 1;
+    break;
+  case 21:
+    FfsFileAlignment = 4;
+    FfsFileAlignment2 = 1;
+    break;
+  case 22:
+    FfsFileAlignment = 5;
+    FfsFileAlignment2 = 1;
+    break;
+  case 23:
+    FfsFileAlignment = 6;
+    FfsFileAlignment2 = 1;
+    break;
+  case 24:
+    FfsFileAlignment = 7;
+    FfsFileAlignment2 = 1;
+    break;
   }
 
-  *FfsFileAttrib = (UINT8) (FfsFileAlignment << 3);
+  *FfsFileAttrib = (UINT8) ((FfsFileAlignment << 3) | (FfsFileAlignment2 << 1));
 
   return ;
 }
@@ -675,7 +703,7 @@ FvcWrite (
   UINTN                               RemainingLength;
   UINTN                               WriteLength;
   UINT8                               *TmpBuffer;
-  
+
   LOffset = 0;
   RemainingLength = CalculateRemainingLength (FvDevice, Offset, &Lba, &LOffset);
   if ((UINTN) (*NumBytes) > RemainingLength) {
@@ -1428,8 +1456,8 @@ FvWriteFile (
 
     if (FileData[Index1].Type == EFI_FV_FILETYPE_FFS_PAD) {
       //
-      // According to PI spec, on EFI_FV_FILETYPE_FFS_PAD: 
-      // "Standard firmware file system services will not return the handle of any pad files, 
+      // According to PI spec, on EFI_FV_FILETYPE_FFS_PAD:
+      // "Standard firmware file system services will not return the handle of any pad files,
       // nor will they permit explicit creation of such files."
       //
       return EFI_INVALID_PARAMETER;

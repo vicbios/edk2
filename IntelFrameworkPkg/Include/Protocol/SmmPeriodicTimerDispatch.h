@@ -1,14 +1,8 @@
 /** @file
   Provides the parent dispatch service for the periodical timer SMI source generator.
 
-Copyright (c) 2007 - 2010, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials are licensed and made available under 
-the terms and conditions of the BSD License that accompanies this distribution.  
-The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php.                                          
-    
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,                     
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2007 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
   @par Revision Reference:
   This Protocol is defined in Framework of EFI SMM Core Interface Spec
@@ -159,12 +153,12 @@ struct _EFI_SMM_PERIODIC_TIMER_DISPATCH_PROTOCOL {
   /// Installs a child service to be dispatched by this protocol.
   ///
   EFI_SMM_PERIODIC_TIMER_REGISTER   Register;
-  
+
   ///
   /// Removes a child service dispatched by this protocol.
   ///
   EFI_SMM_PERIODIC_TIMER_UNREGISTER UnRegister;
-  
+
   ///
   /// Returns the next SMI tick period that is supported by the chipset.
   ///

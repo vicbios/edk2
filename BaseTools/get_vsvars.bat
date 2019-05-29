@@ -3,18 +3,18 @@
 @REM
 @REM Copyright (c) 2013-2014, ARM Limited. All rights reserved.
 
-@REM This program and the accompanying materials
-@REM are licensed and made available under the terms and conditions of the BSD License
-@REM which accompanies this distribution.  The full text of the license may be found at
-@REM http://opensource.org/licenses/bsd-license.php
-@REM
-@REM THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-@REM WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+@REM SPDX-License-Identifier: BSD-2-Clause-Patent
 @REM
 
 
 @echo off
 goto  :main
+
+:set_vsvars
+for /f "usebackq tokens=1* delims=: " %%i in (`%*`) do (
+  if /i "%%i"=="installationPath" call "%%j\VC\Auxiliary\Build\vcvars32.bat"
+)
+goto :EOF
 
 :read_vsvars
 @rem Do nothing if already found, otherwise call vsvars32.bat if there
@@ -33,6 +33,8 @@ REM       (Or invoke the relevant vsvars32 file beforehand).
 
 :main
 if defined VCINSTALLDIR goto :done
+  if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"  call :set_vsvars "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+  if exist "%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"       call :set_vsvars "%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
   if defined VS140COMNTOOLS  call :read_vsvars  "%VS140COMNTOOLS%"
   if defined VS120COMNTOOLS  call :read_vsvars  "%VS120COMNTOOLS%"
   if defined VS110COMNTOOLS  call :read_vsvars  "%VS110COMNTOOLS%"

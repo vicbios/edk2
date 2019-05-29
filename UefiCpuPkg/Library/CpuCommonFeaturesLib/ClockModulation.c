@@ -1,14 +1,8 @@
 /** @file
   Clock Modulation feature.
 
-  Copyright (c) 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2017 - 2018, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -67,40 +61,34 @@ ClockModulationInitialize (
   IN BOOLEAN                           State
   )
 {
-  if (IS_SANDY_BRIDGE_PROCESSOR (CpuInfo->DisplayFamily, CpuInfo->DisplayModel)) {
-    CPU_REGISTER_TABLE_WRITE_FIELD (
-      ProcessorNumber,
-      Msr,
-      MSR_SANDY_BRIDGE_IA32_CLOCK_MODULATION,
-      MSR_SANDY_BRIDGE_IA32_CLOCK_MODULATION_REGISTER,
-      Bits.OnDemandClockModulationDutyCycle,
-      PcdGet8 (PcdCpuClockModulationDutyCycle)
-      );
-    CPU_REGISTER_TABLE_WRITE_FIELD (
-      ProcessorNumber,
-      Msr,
-      MSR_SANDY_BRIDGE_IA32_CLOCK_MODULATION,
-      MSR_SANDY_BRIDGE_IA32_CLOCK_MODULATION_REGISTER,
-      Bits.OnDemandClockModulationEnable,
-      (State) ? 1 : 0
-      );
-  } else {
+  CPUID_THERMAL_POWER_MANAGEMENT_EAX   ThermalPowerManagementEax;
+  AsmCpuid (CPUID_THERMAL_POWER_MANAGEMENT, &ThermalPowerManagementEax.Uint32, NULL, NULL, NULL);
+
+  CPU_REGISTER_TABLE_WRITE_FIELD (
+    ProcessorNumber,
+    Msr,
+    MSR_IA32_CLOCK_MODULATION,
+    MSR_IA32_CLOCK_MODULATION_REGISTER,
+    Bits.OnDemandClockModulationDutyCycle,
+    PcdGet8 (PcdCpuClockModulationDutyCycle) >> 1
+    );
+  if (ThermalPowerManagementEax.Bits.ECMD == 1) {
     CPU_REGISTER_TABLE_WRITE_FIELD (
       ProcessorNumber,
       Msr,
       MSR_IA32_CLOCK_MODULATION,
       MSR_IA32_CLOCK_MODULATION_REGISTER,
-      Bits.OnDemandClockModulationDutyCycle,
-      PcdGet8 (PcdCpuClockModulationDutyCycle)
-      );
-    CPU_REGISTER_TABLE_WRITE_FIELD (
-      ProcessorNumber,
-      Msr,
-      MSR_IA32_CLOCK_MODULATION,
-      MSR_IA32_CLOCK_MODULATION_REGISTER,
-      Bits.OnDemandClockModulationEnable,
-      (State) ? 1 : 0
+      Bits.ExtendedOnDemandClockModulationDutyCycle,
+      PcdGet8 (PcdCpuClockModulationDutyCycle) & BIT0
       );
   }
+  CPU_REGISTER_TABLE_WRITE_FIELD (
+    ProcessorNumber,
+    Msr,
+    MSR_IA32_CLOCK_MODULATION,
+    MSR_IA32_CLOCK_MODULATION_REGISTER,
+    Bits.OnDemandClockModulationEnable,
+    (State) ? 1 : 0
+    );
   return RETURN_SUCCESS;
 }

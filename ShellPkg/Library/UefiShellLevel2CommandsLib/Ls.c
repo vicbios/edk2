@@ -2,19 +2,15 @@
   Main file for ls shell level 2 function.
 
   (C) Copyright 2013-2015 Hewlett-Packard Development Company, L.P.<BR>
-  Copyright (c) 2009 - 2016, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2009 - 2018, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
 #include "UefiShellLevel2CommandsLib.h"
 #include <Guid/FileSystemInfo.h>
+
+UINTN     mDayOfMonth[] = {31, 28, 31, 30, 31, 30, 31, 30, 31, 30, 31, 30};
 
 /**
   print out the standard format output volume entry.
@@ -152,10 +148,10 @@ PrintSfoVolumeInfoTableEntry(
 **/
 VOID
 PrintFileInformation(
-  IN CONST BOOLEAN              Sfo, 
-  IN CONST EFI_SHELL_FILE_INFO  *TheNode, 
-  IN UINT64                     *Files, 
-  IN UINT64                     *Size, 
+  IN CONST BOOLEAN              Sfo,
+  IN CONST EFI_SHELL_FILE_INFO  *TheNode,
+  IN UINT64                     *Files,
+  IN UINT64                     *Size,
   IN UINT64                     *Dirs
   )
 {
@@ -298,8 +294,8 @@ PrintNonSfoHeader(
 **/
 VOID
 PrintNonSfoFooter(
-  IN UINT64                     Files, 
-  IN UINT64                     Size, 
+  IN UINT64                     Files,
+  IN UINT64                     Size,
   IN UINT64                     Dirs
   )
 {
@@ -316,6 +312,96 @@ PrintNonSfoFooter(
     Size,
     Dirs
    );
+}
+
+/**
+  Change the file time to local time based on the timezone.
+
+  @param[in] Time               The file time.
+  @param[in] LocalTimeZone      Local time zone.
+**/
+VOID
+FileTimeToLocalTime (
+  IN EFI_TIME             *Time,
+  IN INT16                LocalTimeZone
+  )
+{
+  INTN                    MinuteDiff;
+  INTN                    TempMinute;
+  INTN                    HourNumberOfTempMinute;
+  INTN                    TempHour;
+  INTN                    DayNumberOfTempHour;
+  INTN                    TempDay;
+  INTN                    MonthNumberOfTempDay;
+  INTN                    TempMonth;
+  INTN                    YearNumberOfTempMonth;
+  INTN                    MonthRecord;
+
+  ASSERT ((Time->TimeZone >= -1440) && (Time->TimeZone <=1440));
+  ASSERT ((LocalTimeZone >= -1440) && (LocalTimeZone <=1440));
+  ASSERT ((Time->Month >= 1) && (Time->Month <= 12));
+
+  if(Time->TimeZone == LocalTimeZone) {
+    //
+    //if the file timezone is equal to the local timezone, there is no need to adjust the file time.
+    //
+    return;
+  }
+
+  if((Time->Year % 4 == 0 && Time->Year / 100 != 0)||(Time->Year % 400 == 0)) {
+    //
+    // Day in February of leap year is 29.
+    //
+    mDayOfMonth[1] = 29;
+  }
+
+  MinuteDiff = Time->TimeZone - LocalTimeZone;
+  TempMinute = Time->Minute + MinuteDiff;
+
+  //
+  // Calculate Time->Minute
+  // TempHour will be used to calculate Time->Hour
+  //
+  HourNumberOfTempMinute = TempMinute / 60;
+  if(TempMinute < 0) {
+    HourNumberOfTempMinute --;
+  }
+  TempHour = Time->Hour + HourNumberOfTempMinute;
+  Time->Minute = (UINT8)(TempMinute - 60 * HourNumberOfTempMinute);
+
+  //
+  // Calculate Time->Hour
+  // TempDay will be used to calculate Time->Day
+  //
+  DayNumberOfTempHour = TempHour / 24 ;
+  if(TempHour < 0){
+    DayNumberOfTempHour--;
+  }
+  TempDay = Time->Day + DayNumberOfTempHour;
+  Time->Hour = (UINT8)(TempHour - 24 * DayNumberOfTempHour);
+
+  //
+  // Calculate Time->Day
+  // TempMonth will be used to calculate Time->Month
+  //
+  MonthNumberOfTempDay = (TempDay - 1) / (INTN)mDayOfMonth[Time->Month - 1];
+  MonthRecord = (INTN)(Time->Month) ;
+  if(TempDay - 1 < 0){
+    MonthNumberOfTempDay -- ;
+    MonthRecord -- ;
+  }
+  TempMonth = Time->Month + MonthNumberOfTempDay;
+  Time->Day = (UINT8)(TempDay - (INTN)mDayOfMonth[(MonthRecord - 1 + 12) % 12] * MonthNumberOfTempDay);
+
+  //
+  // Calculate Time->Month, Time->Year
+  //
+  YearNumberOfTempMonth = (TempMonth - 1) / 12;
+  if(TempMonth - 1 < 0){
+    YearNumberOfTempMonth --;
+  }
+  Time->Month = (UINT8)(TempMonth - 12 * (YearNumberOfTempMonth));
+  Time->Year = (UINT16)(Time->Year + YearNumberOfTempMonth);
 }
 
 /**
@@ -357,6 +443,7 @@ PrintLsOutput(
   CHAR16                *CorrectedPath;
   BOOLEAN               FoundOne;
   BOOLEAN               HeaderPrinted;
+  EFI_TIME              LocalTime;
 
   HeaderPrinted = FALSE;
   FileCount     = 0;
@@ -408,6 +495,29 @@ PrintLsOutput(
         break;
       }
       ASSERT(Node != NULL);
+
+      //
+      // Change the file time to local time.
+      //
+      Status = gRT->GetTime(&LocalTime, NULL);
+      if (!EFI_ERROR (Status)) {
+        if ((Node->Info->CreateTime.TimeZone != EFI_UNSPECIFIED_TIMEZONE) &&
+            (Node->Info->CreateTime.Month >= 1 && Node->Info->CreateTime.Month <= 12)) {
+          //
+          // FileTimeToLocalTime () requires Month is in a valid range, other buffer out-of-band access happens.
+          //
+          FileTimeToLocalTime (&Node->Info->CreateTime, LocalTime.TimeZone);
+        }
+        if ((Node->Info->LastAccessTime.TimeZone != EFI_UNSPECIFIED_TIMEZONE) &&
+            (Node->Info->LastAccessTime.Month >= 1 && Node->Info->LastAccessTime.Month <= 12)) {
+          FileTimeToLocalTime (&Node->Info->LastAccessTime, LocalTime.TimeZone);
+        }
+        if ((Node->Info->ModificationTime.TimeZone != EFI_UNSPECIFIED_TIMEZONE) &&
+            (Node->Info->ModificationTime.Month >= 1 && Node->Info->ModificationTime.Month <= 12)) {
+          FileTimeToLocalTime (&Node->Info->ModificationTime, LocalTime.TimeZone);
+        }
+      }
+
       if (LongestPath < StrSize(Node->FullName)) {
         LongestPath = StrSize(Node->FullName);
       }
@@ -466,7 +576,7 @@ PrintLsOutput(
     }
     CorrectedPath = StrnCatGrow(&CorrectedPath, &LongestPath, L"*",     0);
     Status = ShellOpenFileMetaArg((CHAR16*)CorrectedPath, EFI_FILE_MODE_READ, &ListHead);
-   
+
     if (!EFI_ERROR(Status)) {
       for ( Node = (EFI_SHELL_FILE_INFO *)GetFirstNode(&ListHead->Link)
           ; !IsNull(&ListHead->Link, &Node->Link) && ShellStatus == SHELL_SUCCESS
@@ -493,7 +603,7 @@ PrintLsOutput(
             &FoundOne,
             Count,
             TimeZone);
-            
+
           //
           // Since it's running recursively, we have to break immediately when returned SHELL_ABORTED
           //
@@ -582,7 +692,7 @@ ShellCommandRunLs (
   Status = ShellCommandLineParse (LsParamList, &Package, &ProblemParam, TRUE);
   if (EFI_ERROR(Status)) {
     if (Status == EFI_VOLUME_CORRUPTED && ProblemParam != NULL) {
-      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PROBLEM), gShellLevel2HiiHandle, L"ls", ProblemParam);  
+      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PROBLEM), gShellLevel2HiiHandle, L"ls", ProblemParam);
       FreePool(ProblemParam);
       ShellStatus = SHELL_INVALID_PARAMETER;
     } else {
@@ -597,7 +707,7 @@ ShellCommandRunLs (
     }
 
     if (ShellCommandLineGetCount(Package) > 2) {
-      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_TOO_MANY), gShellLevel2HiiHandle, L"ls");  
+      ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_TOO_MANY), gShellLevel2HiiHandle, L"ls");
       ShellStatus = SHELL_INVALID_PARAMETER;
     } else {
       //
@@ -635,7 +745,7 @@ ShellCommandRunLs (
               Count++;
               continue;
             default:
-              ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_ATTRIBUTE), gShellLevel2HiiHandle, L"ls", ShellCommandLineGetValue(Package, L"-a"));  
+              ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_ATTRIBUTE), gShellLevel2HiiHandle, L"ls", ShellCommandLineGetValue(Package, L"-a"));
               ShellStatus = SHELL_INVALID_PARAMETER;
               break;
           } // switch
@@ -656,7 +766,7 @@ ShellCommandRunLs (
           CurDir = gEfiShellProtocol->GetCurDir(NULL);
           if (CurDir == NULL) {
             ShellStatus = SHELL_NOT_FOUND;
-            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_NO_CWD), gShellLevel2HiiHandle, L"ls");  
+            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_NO_CWD), gShellLevel2HiiHandle, L"ls");
           }
           //
           // Copy to the 2 strings for starting path and file search string
@@ -673,7 +783,7 @@ ShellCommandRunLs (
             // If we got something and it doesnt have a fully qualified path, then we needed to have a CWD.
             //
             ShellStatus = SHELL_NOT_FOUND;
-            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_NO_CWD), gShellLevel2HiiHandle, L"ls");  
+            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_NO_CWD), gShellLevel2HiiHandle, L"ls");
           } else {
             //
             // We got a valid fully qualified path or we have a CWD
@@ -693,7 +803,7 @@ ShellCommandRunLs (
                 ShellCommandLineFreeVarList (Package);
                 return SHELL_OUT_OF_RESOURCES;
             }
-               
+
             if  (ShellIsDirectory(PathName) == EFI_SUCCESS) {
               //
               // is listing ends with a directory, then we list all files in that directory
@@ -716,7 +826,7 @@ ShellCommandRunLs (
         }
         Status = gRT->GetTime(&TheTime, NULL);
         if (EFI_ERROR(Status)) {
-          ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_UEFI_FUNC_WARN), gShellLevel2HiiHandle, L"ls", L"gRT->GetTime", Status);  
+          ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_UEFI_FUNC_WARN), gShellLevel2HiiHandle, L"ls", L"gRT->GetTime", Status);
           TheTime.TimeZone = EFI_UNSPECIFIED_TIMEZONE;
         }
 
@@ -732,15 +842,15 @@ ShellCommandRunLs (
             TheTime.TimeZone
            );
           if (ShellStatus == SHELL_NOT_FOUND) {
-            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_LS_FILE_NOT_FOUND), gShellLevel2HiiHandle, L"ls", FullPath);  
+            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_LS_FILE_NOT_FOUND), gShellLevel2HiiHandle, L"ls", FullPath);
           } else if (ShellStatus == SHELL_INVALID_PARAMETER) {
-            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PARAM_INV), gShellLevel2HiiHandle, L"ls", FullPath);  
+            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PARAM_INV), gShellLevel2HiiHandle, L"ls", FullPath);
           } else if (ShellStatus == SHELL_ABORTED) {
             //
             // Ignore aborting.
             //
           } else if (ShellStatus != SHELL_SUCCESS) {
-            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PARAM_INV), gShellLevel2HiiHandle, L"ls", FullPath);  
+            ShellPrintHiiEx(-1, -1, NULL, STRING_TOKEN (STR_GEN_PARAM_INV), gShellLevel2HiiHandle, L"ls", FullPath);
           }
         }
       }

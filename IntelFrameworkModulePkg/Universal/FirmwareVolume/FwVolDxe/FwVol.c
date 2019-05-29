@@ -4,16 +4,9 @@
   Layers on top of Firmware Block protocol to produce a file abstraction
   of FV based files.
 
-  Copyright (c) 2006 - 2014, Intel Corporation. All rights reserved.<BR>
+  Copyright (c) 2006 - 2019, Intel Corporation. All rights reserved.<BR>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions
-  of the BSD License which accompanies this distribution.  The
-  full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -195,7 +188,7 @@ FreeFvDeviceResource (
 /**
 
   Firmware volume inherits authentication status from the FV image file and section(in another firmware volume)
-  where it came from.
+  where it came from or propagated from PEI-phase.
 
   @param  FvDevice              A pointer to the FvDevice.
 
@@ -205,26 +198,30 @@ FwVolInheritAuthenticationStatus (
   IN FV_DEVICE  *FvDevice
   )
 {
-  EFI_STATUS                        Status;
-  EFI_FIRMWARE_VOLUME_HEADER        *CachedFvHeader;
-  EFI_FIRMWARE_VOLUME_EXT_HEADER    *CachedFvExtHeader;
-  EFI_FIRMWARE_VOLUME2_PROTOCOL     *ParentFvProtocol;
-  UINTN                             Key;
-  EFI_GUID                          FileNameGuid;
-  EFI_FV_FILETYPE                   FileType;
-  EFI_FV_FILE_ATTRIBUTES            FileAttributes;
-  UINTN                             FileSize;
-  EFI_SECTION_TYPE                  SectionType;
-  UINT32                            AuthenticationStatus;
-  EFI_FIRMWARE_VOLUME_HEADER        *FvHeader;
-  EFI_FIRMWARE_VOLUME_EXT_HEADER    *FvExtHeader;
-  UINTN                             BufferSize;
-
-  CachedFvHeader = (EFI_FIRMWARE_VOLUME_HEADER *) (UINTN) FvDevice->CachedFv;
+  EFI_STATUS                            Status;
+  EFI_FIRMWARE_VOLUME_HEADER            *CachedFvHeader;
+  EFI_FIRMWARE_VOLUME_EXT_HEADER        *CachedFvExtHeader;
+  EFI_FIRMWARE_VOLUME2_PROTOCOL         *ParentFvProtocol;
+  UINTN                                 Key;
+  EFI_GUID                              FileNameGuid;
+  EFI_FV_FILETYPE                       FileType;
+  EFI_FV_FILE_ATTRIBUTES                FileAttributes;
+  UINTN                                 FileSize;
+  EFI_SECTION_TYPE                      SectionType;
+  UINT32                                AuthenticationStatus;
+  EFI_FIRMWARE_VOLUME_HEADER            *FvHeader;
+  EFI_FIRMWARE_VOLUME_EXT_HEADER        *FvExtHeader;
+  UINTN                                 BufferSize;
+  EFI_FIRMWARE_VOLUME_BLOCK_PROTOCOL    *Fvb;
+  EFI_FVB_ATTRIBUTES_2                  FvbAttributes;
+  EFI_PHYSICAL_ADDRESS                  BaseAddress;
+  EFI_PEI_HOB_POINTERS                  Fv3Hob;
 
   if (FvDevice->Fv.ParentHandle != NULL) {
+    CachedFvHeader = (EFI_FIRMWARE_VOLUME_HEADER *) (UINTN) FvDevice->CachedFv;
+
     //
-    // By Parent Handle, find out the FV image file and section(in another firmware volume) where the firmware volume came from 
+    // By Parent Handle, find out the FV image file and section(in another firmware volume) where the firmware volume came from
     //
     Status = gBS->HandleProtocol (FvDevice->Fv.ParentHandle, &gEfiFirmwareVolume2ProtocolGuid, (VOID **) &ParentFvProtocol);
     if (!EFI_ERROR (Status) && (ParentFvProtocol != NULL)) {
@@ -258,7 +255,7 @@ FwVolInheritAuthenticationStatus (
         if (!EFI_ERROR (Status)) {
           if ((FvHeader->FvLength == CachedFvHeader->FvLength) &&
               (FvHeader->ExtHeaderOffset == CachedFvHeader->ExtHeaderOffset)) {
-            if (FvHeader->ExtHeaderOffset !=0) {
+            if (FvHeader->ExtHeaderOffset != 0) {
               //
               // Both FVs contain extension header, then compare their FV Name GUID
               //
@@ -291,6 +288,35 @@ FwVolInheritAuthenticationStatus (
           FreePool ((VOID *) FvHeader);
         }
       } while (TRUE);
+    }
+  } else {
+    Fvb = FvDevice->Fvb;
+
+    Status  = Fvb->GetAttributes (Fvb, &FvbAttributes);
+    if (EFI_ERROR (Status)) {
+      return;
+    }
+
+    if ((FvbAttributes & EFI_FVB2_MEMORY_MAPPED) != 0) {
+      //
+      // Get volume base address
+      //
+      Status = Fvb->GetPhysicalAddress (Fvb, &BaseAddress);
+      if (EFI_ERROR (Status)) {
+        return;
+      }
+
+      //
+      // Get the authentication status propagated from PEI-phase to DXE.
+      //
+      Fv3Hob.Raw = GetHobList ();
+      while ((Fv3Hob.Raw = GetNextHob (EFI_HOB_TYPE_FV3, Fv3Hob.Raw)) != NULL) {
+        if (Fv3Hob.FirmwareVolume3->BaseAddress == BaseAddress) {
+          FvDevice->AuthenticationStatus = Fv3Hob.FirmwareVolume3->AuthenticationStatus;
+          return;
+        }
+        Fv3Hob.Raw = GET_NEXT_HOB (Fv3Hob);
+      }
     }
   }
 }
@@ -477,10 +503,10 @@ FvCheck (
     //
     FwVolExtHeader = (EFI_FIRMWARE_VOLUME_EXT_HEADER *) (UINTN) (FvDevice->CachedFv + FvDevice->FwVolHeader->ExtHeaderOffset);
     Ptr = (UINT8 *) FwVolExtHeader + FwVolExtHeader->ExtHeaderSize;
-    Ptr = (UINT8 *) ALIGN_POINTER (Ptr, 8);
   } else {
     Ptr = (UINT8 *) (UINTN) (FvDevice->CachedFv + FvDevice->FwVolHeader->HeaderLength);
   }
+  Ptr = (UINT8 *) ALIGN_POINTER (Ptr, 8);
   TopFvAddress = (UINT8 *) (UINTN) (FvDevice->CachedFv + FvDevice->FwVolHeader->FvLength);
 
   //
@@ -756,7 +782,7 @@ FwVolDriverInit (
       } else {
         FreePool (FvDevice);
       }
-      
+
       DEBUG ((EFI_D_INFO, "Reinstall FV protocol as writable - %r\n", Status));
       ASSERT_EFI_ERROR (Status);
     } else {
@@ -774,7 +800,7 @@ FwVolDriverInit (
       } else {
         FreePool (FvDevice);
       }
-      
+
       DEBUG ((EFI_D_INFO, "Install FV protocol as writable - %r\n", Status));
       ASSERT_EFI_ERROR (Status);
     }
@@ -789,7 +815,7 @@ Done:
   if (InstallFlag) {
     return EFI_SUCCESS;
   }
-  
+
   //
   // No FV protocol install/reinstall successfully.
   // EFI_NOT_FOUND should return to ensure this image will be unloaded.

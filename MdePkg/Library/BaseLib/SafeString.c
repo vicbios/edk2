@@ -1,14 +1,8 @@
 /** @file
   Safe String functions.
 
-  Copyright (c) 2014 - 2017, Intel Corporation. All rights reserved.<BR>
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions of the BSD License
-  which accompanies this distribution.  The full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php.
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  Copyright (c) 2014 - 2019, Intel Corporation. All rights reserved.<BR>
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -217,7 +211,7 @@ StrnSizeS (
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumUnicodeStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumUnicodeStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -231,7 +225,7 @@ StrCpyS (
   )
 {
   UINTN            SourceLen;
-  
+
   ASSERT (((UINTN) Destination & BIT0) == 0);
   ASSERT (((UINTN) Source & BIT0) == 0);
 
@@ -296,12 +290,12 @@ StrCpyS (
   @param  Length                   The maximum number of Unicode characters to copy.
 
   @retval RETURN_SUCCESS           String is copied.
-  @retval RETURN_BUFFER_TOO_SMALL  If DestMax is NOT greater than 
+  @retval RETURN_BUFFER_TOO_SMALL  If DestMax is NOT greater than
                                    MIN(StrLen(Source), Length).
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumUnicodeStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumUnicodeStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -342,7 +336,7 @@ StrnCpyS (
   //
   // 4. If Length is not less than DestMax, then DestMax shall be greater than StrnLenS(Source, DestMax).
   //
-  SourceLen = StrnLenS (Source, DestMax);
+  SourceLen = StrnLenS (Source, MIN (DestMax, Length));
   if (Length >= DestMax) {
     SAFE_STRING_CONSTRAINT_CHECK ((DestMax > SourceLen), RETURN_BUFFER_TOO_SMALL);
   }
@@ -361,7 +355,7 @@ StrnCpyS (
   // pointed to by Destination. If no null character was copied from Source, then Destination[Length] is set to a null
   // character.
   //
-  while ((*Source != 0) && (SourceLen > 0)) {
+  while ((SourceLen > 0) && (*Source != 0)) {
     *(Destination++) = *(Source++);
     SourceLen--;
   }
@@ -388,14 +382,14 @@ StrnCpyS (
   @param  Source                   A pointer to a Null-terminated Unicode string.
 
   @retval RETURN_SUCCESS           String is appended.
-  @retval RETURN_BAD_BUFFER_SIZE   If DestMax is NOT greater than 
+  @retval RETURN_BAD_BUFFER_SIZE   If DestMax is NOT greater than
                                    StrLen(Destination).
   @retval RETURN_BUFFER_TOO_SMALL  If (DestMax - StrLen(Destination)) is NOT
                                    greater than StrLen(Source).
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumUnicodeStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumUnicodeStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -411,7 +405,7 @@ StrCatS (
   UINTN               DestLen;
   UINTN               CopyLen;
   UINTN               SourceLen;
-  
+
   ASSERT (((UINTN) Destination & BIT0) == 0);
   ASSERT (((UINTN) Source & BIT0) == 0);
 
@@ -497,7 +491,7 @@ StrCatS (
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumUnicodeStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumUnicodeStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -514,7 +508,7 @@ StrnCatS (
   UINTN               DestLen;
   UINTN               CopyLen;
   UINTN               SourceLen;
-  
+
   ASSERT (((UINTN) Destination & BIT0) == 0);
   ASSERT (((UINTN) Source & BIT0) == 0);
 
@@ -551,7 +545,7 @@ StrnCatS (
   //
   // 5. If Length is not less than CopyLen, then CopyLen shall be greater than StrnLenS(Source, CopyLen).
   //
-  SourceLen = StrnLenS (Source, CopyLen);
+  SourceLen = StrnLenS (Source, MIN (CopyLen, Length));
   if (Length >= CopyLen) {
     SAFE_STRING_CONSTRAINT_CHECK ((CopyLen > SourceLen), RETURN_BUFFER_TOO_SMALL);
   }
@@ -572,7 +566,7 @@ StrnCatS (
   // a null character.
   //
   Destination = Destination + DestLen;
-  while ((*Source != 0) && (SourceLen > 0)) {
+  while ((SourceLen > 0) && (*Source != 0)) {
     *(Destination++) = *(Source++);
     SourceLen--;
   }
@@ -905,7 +899,7 @@ StrHexToUintnS (
     String++;
   }
 
-  if (InternalCharToUpper (*String) == L'X') {
+  if (CharToUpper (*String) == L'X') {
     if (*(String - 1) != L'0') {
       *Data = 0;
       return RETURN_SUCCESS;
@@ -1036,7 +1030,7 @@ StrHexToUint64S (
     String++;
   }
 
-  if (InternalCharToUpper (*String) == L'X') {
+  if (CharToUpper (*String) == L'X') {
     if (*(String - 1) != L'0') {
       *Data = 0;
       return RETURN_SUCCESS;
@@ -1799,7 +1793,7 @@ AsciiStrnSizeS (
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumAsciiStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumAsciiStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -1813,7 +1807,7 @@ AsciiStrCpyS (
   )
 {
   UINTN            SourceLen;
-  
+
   //
   // 1. Neither Destination nor Source shall be a null pointer.
   //
@@ -1873,12 +1867,12 @@ AsciiStrCpyS (
   @param  Length                   The maximum number of Ascii characters to copy.
 
   @retval RETURN_SUCCESS           String is copied.
-  @retval RETURN_BUFFER_TOO_SMALL  If DestMax is NOT greater than 
+  @retval RETURN_BUFFER_TOO_SMALL  If DestMax is NOT greater than
                                    MIN(StrLen(Source), Length).
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumAsciiStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumAsciiStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -1916,7 +1910,7 @@ AsciiStrnCpyS (
   //
   // 4. If Length is not less than DestMax, then DestMax shall be greater than AsciiStrnLenS(Source, DestMax).
   //
-  SourceLen = AsciiStrnLenS (Source, DestMax);
+  SourceLen = AsciiStrnLenS (Source, MIN (DestMax, Length));
   if (Length >= DestMax) {
     SAFE_STRING_CONSTRAINT_CHECK ((DestMax > SourceLen), RETURN_BUFFER_TOO_SMALL);
   }
@@ -1935,7 +1929,7 @@ AsciiStrnCpyS (
   // pointed to by Destination. If no null character was copied from Source, then Destination[Length] is set to a null
   // character.
   //
-  while ((*Source != 0) && (SourceLen > 0)) {
+  while ((SourceLen > 0) && (*Source != 0)) {
     *(Destination++) = *(Source++);
     SourceLen--;
   }
@@ -1960,14 +1954,14 @@ AsciiStrnCpyS (
   @param  Source                   A pointer to a Null-terminated Ascii string.
 
   @retval RETURN_SUCCESS           String is appended.
-  @retval RETURN_BAD_BUFFER_SIZE   If DestMax is NOT greater than 
+  @retval RETURN_BAD_BUFFER_SIZE   If DestMax is NOT greater than
                                    StrLen(Destination).
   @retval RETURN_BUFFER_TOO_SMALL  If (DestMax - StrLen(Destination)) is NOT
                                    greater than StrLen(Source).
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumAsciiStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumAsciiStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -1983,7 +1977,7 @@ AsciiStrCatS (
   UINTN               DestLen;
   UINTN               CopyLen;
   UINTN               SourceLen;
-  
+
   //
   // Let CopyLen denote the value DestMax - AsciiStrnLenS(Destination, DestMax) upon entry to AsciiStrCatS.
   //
@@ -2064,7 +2058,7 @@ AsciiStrCatS (
   @retval RETURN_INVALID_PARAMETER If Destination is NULL.
                                    If Source is NULL.
                                    If PcdMaximumAsciiStringLength is not zero,
-                                    and DestMax is greater than 
+                                    and DestMax is greater than
                                     PcdMaximumAsciiStringLength.
                                    If DestMax is 0.
   @retval RETURN_ACCESS_DENIED     If Source and Destination overlap.
@@ -2081,7 +2075,7 @@ AsciiStrnCatS (
   UINTN               DestLen;
   UINTN               CopyLen;
   UINTN               SourceLen;
-  
+
   //
   // Let CopyLen denote the value DestMax - AsciiStrnLenS(Destination, DestMax) upon entry to AsciiStrnCatS.
   //
@@ -2115,7 +2109,7 @@ AsciiStrnCatS (
   //
   // 5. If Length is not less than CopyLen, then CopyLen shall be greater than AsciiStrnLenS(Source, CopyLen).
   //
-  SourceLen = AsciiStrnLenS (Source, CopyLen);
+  SourceLen = AsciiStrnLenS (Source, MIN (CopyLen, Length));
   if (Length >= CopyLen) {
     SAFE_STRING_CONSTRAINT_CHECK ((CopyLen > SourceLen), RETURN_BUFFER_TOO_SMALL);
   }
@@ -2136,7 +2130,7 @@ AsciiStrnCatS (
   // a null character.
   //
   Destination = Destination + DestLen;
-  while ((*Source != 0) && (SourceLen > 0)) {
+  while ((SourceLen > 0) && (*Source != 0)) {
     *(Destination++) = *(Source++);
     SourceLen--;
   }
@@ -2459,7 +2453,7 @@ AsciiStrHexToUintnS (
     String++;
   }
 
-  if (InternalBaseLibAsciiToUpper (*String) == 'X') {
+  if (AsciiCharToUpper (*String) == 'X') {
     if (*(String - 1) != '0') {
       *Data = 0;
       return RETURN_SUCCESS;
@@ -2586,7 +2580,7 @@ AsciiStrHexToUint64S (
     String++;
   }
 
-  if (InternalBaseLibAsciiToUpper (*String) == 'X') {
+  if (AsciiCharToUpper (*String) == 'X') {
     if (*(String - 1) != '0') {
       *Data = 0;
       return RETURN_SUCCESS;
@@ -2932,7 +2926,7 @@ AsciiStrToUnicodeStrS (
   // Convert string
   //
   while (*Source != '\0') {
-    *(Destination++) = (CHAR16)*(Source++);
+    *(Destination++) = (CHAR16)(UINT8)*(Source++);
   }
   *Destination = '\0';
 
@@ -3045,7 +3039,7 @@ AsciiStrnToUnicodeStrS (
   // Convert string
   //
   while ((*Source != 0) && (SourceLen > 0)) {
-    *(Destination++) = (CHAR16)*(Source++);
+    *(Destination++) = (CHAR16)(UINT8)*(Source++);
     SourceLen--;
     (*DestinationLength)++;
   }
@@ -3265,7 +3259,8 @@ AsciiStrToIpv6Address (
       &Address->Addr[CompressStart + ARRAY_SIZE (Address->Addr) - AddressIndex],
       &LocalAddress.Addr[CompressStart],
       AddressIndex - CompressStart
-      );
+      );
+
   }
 
   if (PrefixLength != NULL) {

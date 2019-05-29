@@ -1,14 +1,8 @@
 /** @file
   BDS Lib functions which relate with connect the device
 
-Copyright (c) 2004 - 2013, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -109,7 +103,7 @@ BdsLibConnectDevicePath (
     return EFI_OUT_OF_RESOURCES;
   }
   CopyOfDevicePath  = DevicePath;
-  
+
   do {
     //
     // The outer loop handles multi instance device paths.
@@ -122,7 +116,7 @@ BdsLibConnectDevicePath (
       FreePool (CopyOfDevicePath);
       return EFI_OUT_OF_RESOURCES;
     }
-    
+
     Next      = Instance;
     while (!IsDevicePathEndType (Next)) {
       Next = NextDevicePathNode (Next);
@@ -203,8 +197,8 @@ BdsLibConnectDevicePath (
 }
 
 /**
-  This function will connect all current system handles recursively. 
-  
+  This function will connect all current system handles recursively.
+
   gBS->ConnectController() service is invoked for each handle exist in system handler buffer.
   If the handle is bus type handler, all childrens also will be connected recursively
   by gBS->ConnectController().
@@ -247,8 +241,8 @@ BdsLibConnectAllEfi (
 }
 
 /**
-  This function will disconnect all current system handles. 
-  
+  This function will disconnect all current system handles.
+
   gBS->DisconnectController() is invoked for each handle exists in system handle buffer.
   If handle is a bus type handle, all childrens also are disconnected recursively by
   gBS->DisconnectController().

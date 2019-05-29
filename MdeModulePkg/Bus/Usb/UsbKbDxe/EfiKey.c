@@ -2,14 +2,8 @@
   USB Keyboard Driver that manages USB keyboard and produces Simple Text Input
   Protocol and Simple Text Input Ex Protocol.
 
-Copyright (c) 2004 - 2016, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials
-are licensed and made available under the terms and conditions of the BSD License
-which accompanies this distribution.  The full text of the license may be found at
-http://opensource.org/licenses/bsd-license.php
-
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+Copyright (c) 2004 - 2018, Intel Corporation. All rights reserved.<BR>
+SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -607,6 +601,8 @@ USBKeyboardReadKeyStrokeWorker (
   }
 
   if (IsQueueEmpty (&UsbKeyboardDevice->EfiKeyQueue)) {
+    ZeroMem (&KeyData->Key, sizeof (KeyData->Key));
+    InitializeKeyState (UsbKeyboardDevice, &KeyData->KeyState);
     return EFI_NOT_READY;
   }
 
@@ -763,9 +759,9 @@ USBKeyboardWaitForKey (
 
   //
   // Enter critical section
-  //  
+  //
   OldTpl = gBS->RaiseTPL (TPL_NOTIFY);
-  
+
   //
   // WaitforKey doesn't suppor the partial key.
   // Considering if the partial keystroke is enabled, there maybe a partial
@@ -1055,10 +1051,14 @@ USBKeyboardSetState (
   Register a notification function for a particular keystroke for the input device.
 
   @param  This                        Protocol instance pointer.
-  @param  KeyData                     A pointer to a buffer that is filled in with the keystroke
-                                      information data for the key that was pressed.
+  @param  KeyData                     A pointer to a buffer that is filled in with
+                                      the keystroke information for the key that was
+                                      pressed. If KeyData.Key, KeyData.KeyState.KeyToggleState
+                                      and KeyData.KeyState.KeyShiftState are 0, then any incomplete
+                                      keystroke will trigger a notification of the KeyNotificationFunction.
   @param  KeyNotificationFunction     Points to the function to be called when the key
-                                      sequence is typed specified by KeyData.
+                                      sequence is typed specified by KeyData. This notification function
+                                      should be called at <=TPL_CALLBACK.
   @param  NotifyHandle                Points to the unique handle assigned to the registered notification.
 
   @retval EFI_SUCCESS                 The notification function was registered successfully.
@@ -1217,7 +1217,7 @@ KeyNotifyProcessHandler (
   while (TRUE) {
     //
     // Enter critical section
-    //  
+    //
     OldTpl = gBS->RaiseTPL (TPL_NOTIFY);
     Status = Dequeue (&UsbKeyboardDevice->EfiKeyQueueForNotify, &KeyData, sizeof (KeyData));
     //

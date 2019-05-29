@@ -3,16 +3,9 @@
   configuration file and pass the information to the update driver
   so that the driver can perform updates accordingly.
 
-  Copyright (c) 2002 - 2015, Intel Corporation. All rights reserved.<BR>
+  Copyright (c) 2002 - 2018, Intel Corporation. All rights reserved.<BR>
 
-  This program and the accompanying materials
-  are licensed and made available under the terms and conditions
-  of the BSD License which accompanies this distribution.  The
-  full text of the license may be found at
-  http://opensource.org/licenses/bsd-license.php
-
-  THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
-  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
@@ -622,7 +615,7 @@ UpdateValueToString (
 }
 
 /**
-  Convert the input value to a ascii string, 
+  Convert the input value to a ascii string,
   and concatenates this string to the input string.
 
   @param Str             Pointer to a Null-terminated ASCII string.
@@ -786,7 +779,7 @@ UpdateStringToGuid (
 
 /**
   Pre process config data buffer into Section entry list and Comment entry list.
- 
+
   @param DataBuffer      Config raw file buffer.
   @param BufferSize      Size of raw buffer.
   @param SectionHead     Pointer to the section entry list.
